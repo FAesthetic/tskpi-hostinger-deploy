@@ -131,12 +131,12 @@ export function DashboardKpiExplorer({
               KPI-Steuerung
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
-              Quartal lesen, Fokus setzen, Woche nachpflegen
+              Kompakter Quartalsblick
             </h2>
           </div>
           <p className="max-w-xl text-sm leading-6 text-slate-400">
-            Dashboard zeigt Entscheidung und Eingabe. Klick auf eine KPI-Karte oeffnet Verlauf,
-            Wochenwerte und Detailprognose.
+            Karten zeigen den echten Ist-Stand zum Ziel. Klick oeffnet Wochenwerte, Verlauf und
+            Detailprognose.
           </p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -146,9 +146,9 @@ export function DashboardKpiExplorer({
         </div>
       </section>
 
-      <div className="grid gap-8">
+      <div className="grid gap-6">
         {groupedCards.map(([category, items]) => (
-          <section className="grid gap-4" key={category}>
+          <section className="grid gap-3" key={category}>
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <span className={`h-8 w-1.5 rounded-full ${categoryAccents[category]}`} />
@@ -166,7 +166,7 @@ export function DashboardKpiExplorer({
               </span>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {items.map((card) => (
                 <KpiCockpitCard
                   card={card}
@@ -215,15 +215,15 @@ function KpiCockpitCard({
   const insight = buildStatusInsight(card);
 
   return (
-    <article className="group rounded-2xl border border-white/[0.08] bg-ink-900/95 p-5 shadow-cockpit transition duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:bg-[#1B1C1F]">
+    <article className="group rounded-2xl border border-white/[0.08] bg-ink-900/95 p-4 shadow-cockpit transition duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:bg-[#1B1C1F]">
       <button className="block w-full text-left" onClick={onOpen} type="button">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <span className="grid h-12 w-12 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-slate-300 transition group-hover:border-white/15 group-hover:text-white">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-slate-300 transition group-hover:border-white/15 group-hover:text-white">
               <Icon aria-hidden className="h-5 w-5" />
             </span>
-            <div>
-              <h3 className="text-xl font-semibold tracking-tight text-white">{displayName}</h3>
+            <div className="min-w-0">
+              <h3 className="truncate text-lg font-semibold tracking-tight text-white">{displayName}</h3>
               <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 {categoryLabel}
               </p>
@@ -232,22 +232,32 @@ function KpiCockpitCard({
           <StatusBadge tone={card.status}>{statusLabel(card.status)}</StatusBadge>
         </div>
 
-        <div className="mt-7 flex items-end gap-2">
-          <span className="text-5xl font-semibold tracking-tight text-white">
-            {formatPercent(currentPercent)}
-          </span>
-          <span className="pb-2 text-xl font-bold text-slate-500">%</span>
+        <div className="mt-5 flex items-end justify-between gap-3">
+          <div>
+            <div className="flex items-end gap-2">
+              <span className="text-4xl font-semibold tracking-tight text-white">
+                {formatPercent(currentPercent)}
+              </span>
+              <span className="pb-1 text-lg font-bold text-slate-500">%</span>
+            </div>
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-pulse-300">
+              Ist zum Ziel
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Runrate
+            </p>
+            <p className="mt-1 text-base font-semibold text-white">
+              {formatPercent(forecastPercent)}%
+            </p>
+          </div>
         </div>
-        <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">
-          aktuelle Zielerreichung
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-400">
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
           <span>Noch {restLabel} offen</span>
           <span className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1 text-xs text-slate-300">
             {formatValue(card.differenceToTarget, card.valueType, card.unit)}
-          </span>
-          <span className="rounded-lg border border-pulse-500/20 bg-pulse-500/10 px-2 py-1 text-xs text-pulse-200">
-            Runrate {formatPercent(forecastPercent)}%
           </span>
           {card.portingPipeline > 0 ? (
             <span className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200">
@@ -256,28 +266,22 @@ function KpiCockpitCard({
           ) : null}
         </div>
 
-        <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.06]">
           <div
             className="h-full rounded-full bg-pulse-500"
             style={{ width: `${Math.min(Math.max(currentPercent ?? 0, 0), 100)}%` }}
           />
         </div>
 
-        <p className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-sm leading-6 text-slate-300">
+        <p className="mt-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-xs leading-5 text-slate-300">
           {insight}
         </p>
-        {card.portingPipeline > 0 ? (
-          <p className="mt-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-100">
-            Zukunftsportierungen sind in Prognose und Tagesbedarf beruecksichtigt, zaehlen aber
-            erst ab Portierungsdatum offiziell zum Ist-Stand.
-          </p>
-        ) : null}
 
-        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-white/[0.08] pt-4 text-sm">
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/[0.08] pt-3 text-sm">
           <MetricLabel label="Ziel" value={formatValue(card.target, card.valueType, card.unit)} />
           <MetricLabel label="Aktuell" value={formatValue(card.actual, card.valueType, card.unit)} />
           <MetricLabel
-            label="Runrate Wert"
+            label="Prognose"
             value={formatValue(card.runrateForecast, card.valueType, card.unit)}
           />
           {card.portingPipeline > 0 ? (
@@ -292,49 +296,52 @@ function KpiCockpitCard({
       </button>
 
       {card.valueType === "score" ? (
-        <div className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+        <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
             tNPS wird woechentlich gepflegt
           </p>
-          <p className="mt-2 text-sm text-slate-400">
-            Kein additiver Tageswert. Werte bitte im tNPS-Verlauf aktualisieren.
+          <p className="mt-2 text-xs text-slate-400">
+            Kein additiver Tageswert. Verlauf im Detailbereich pflegen.
           </p>
         </div>
       ) : (
         <form
           action={saveCurrentStandAdjustmentsAction}
-          className="mt-5 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3"
+          className="mt-4 flex items-end gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] p-2"
         >
           <input name="shop_id" type="hidden" value={shopId} />
           <input name="year" type="hidden" value={year} />
           <input name="quarter" type="hidden" value={quarter} />
-          <label className="grid gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Aktuellen Gesamtstand setzen
-            <div className="grid gap-2">
-              <input
-                className="h-11 min-w-0 flex-1 rounded-xl border border-white/[0.09] bg-ink-800 px-3 text-base font-semibold text-white outline-none transition placeholder:text-slate-600 focus:border-pulse-500/60 focus:ring-2 focus:ring-pulse-500/10"
-                defaultValue={card.dailyValue || ""}
-                inputMode="decimal"
-                name={`current_value_${card.id}`}
-                onBlur={(event) => {
-                  if (event.currentTarget.value.trim() !== "") {
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                placeholder={displayUnitLabel(card.valueType, card.unit)}
-                type="number"
-              />
-          <p className="text-[11px] font-medium normal-case tracking-normal text-slate-500">
-                Das ist der Gesamtstand im Quartal. Wenn Wochen fehlen, setzt TS KPI nur einen pauschalen Ausgleich bis zu diesem Stand.
-              </p>
-            </div>
+          <label className="min-w-0 flex-1">
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Gesamtstand
+            </span>
+            <input
+              className="mt-1 h-9 w-full min-w-0 rounded-lg border border-white/[0.09] bg-ink-800 px-3 text-sm font-semibold text-white outline-none transition placeholder:text-slate-600 focus:border-pulse-500/60 focus:ring-2 focus:ring-pulse-500/10"
+              defaultValue={card.dailyValue || ""}
+              inputMode="decimal"
+              name={`current_value_${card.id}`}
+              onBlur={(event) => {
+                if (event.currentTarget.value.trim() !== "") {
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              placeholder={displayUnitLabel(card.valueType, card.unit)}
+              type="number"
+            />
           </label>
+          <button
+            className="h-9 rounded-lg border border-white/[0.1] bg-white/[0.05] px-3 text-xs font-semibold text-slate-200 transition hover:border-pulse-400/40 hover:bg-pulse-500/10 hover:text-white"
+            type="submit"
+          >
+            Setzen
+          </button>
         </form>
       )}
     </article>
@@ -672,8 +679,8 @@ function KpiMetricMiniCard({
 function MetricLabel({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }
