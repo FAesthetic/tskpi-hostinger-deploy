@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getQuarterBounds, type Quarter } from "@/lib/kpi/dates";
+import { listQuarterWeeks } from "@/lib/kpi/weeks";
 import { recordNotificationEvent } from "@/lib/notifications/events";
 import { createClient } from "@/lib/supabase/server";
 
@@ -377,10 +378,10 @@ export async function saveWeeklyKpiEntriesAction(formData: FormData) {
   } = await supabase.auth.getUser();
 
   const values = Array.from(formData.entries())
-    .filter(([key, rawValue]) => key.startsWith("weekly_value_") && String(rawValue).trim() !== "")
+    .filter(([key]) => key.startsWith("weekly_value_"))
     .map(([key, rawValue]) => ({
       kpiDefinitionId: key.replace("weekly_value_", ""),
-      value: numberValueFromRaw(rawValue)
+      value: numberValueFromRaw(rawValue, 0)
     }))
     .filter((entry) => entry.kpiDefinitionId.length > 0 && entry.value !== null);
 
@@ -449,10 +450,10 @@ export async function saveCurrentStandAdjustmentsAction(formData: FormData) {
   const { startDate, endDate } = getQuarterBounds(year, quarter);
 
   const currentValues = Array.from(formData.entries())
-    .filter(([key, rawValue]) => key.startsWith("current_value_") && String(rawValue).trim() !== "")
+    .filter(([key]) => key.startsWith("current_value_"))
     .map(([key, rawValue]) => ({
       kpiDefinitionId: key.replace("current_value_", ""),
-      desiredActual: numberValueFromRaw(rawValue)
+      desiredActual: numberValueFromRaw(rawValue, 0)
     }))
     .filter((entry) => entry.kpiDefinitionId.length > 0 && entry.desiredActual !== null);
 
@@ -470,11 +471,17 @@ export async function saveCurrentStandAdjustmentsAction(formData: FormData) {
       .filter((item) => item.source !== "quarter_adjustment")
       .reduce((sum, item) => sum + item.value, 0);
     const desiredActual = entry.desiredActual ?? 0;
-    const existingAdjustment = (entries ?? []).find((item) => item.source === "quarter_adjustment");
+    const existingAdjustments = (entries ?? []).filter((item) => item.source === "quarter_adjustment");
+    const existingAdjustment = existingAdjustments[0] ?? null;
 
     if (desiredActual <= baseActual) {
-      if (existingAdjustment) {
-        const { error } = await supabase.from("daily_kpi_entries").delete().eq("id", existingAdjustment.id);
+      if (existingAdjustments.length) {
+        const { error } = await supabase
+          .from("daily_kpi_entries")
+          .delete()
+          .eq("shop_id", shopId)
+          .eq("kpi_definition_id", entry.kpiDefinitionId)
+          .eq("source", "quarter_adjustment");
 
         if (error) {
           throw new Error(error.message);
@@ -504,6 +511,19 @@ export async function saveCurrentStandAdjustmentsAction(formData: FormData) {
     if (error) {
       throw new Error(error.message);
     }
+
+    const duplicateAdjustments = existingAdjustments.slice(1);
+
+    if (duplicateAdjustments.length) {
+      const { error: duplicateError } = await supabase
+        .from("daily_kpi_entries")
+        .delete()
+        .in("id", duplicateAdjustments.map((adjustment) => adjustment.id));
+
+      if (duplicateError) {
+        throw new Error(duplicateError.message);
+      }
+    }
   }
 
   if (currentValues.length) {
@@ -526,8 +546,71 @@ export async function saveCurrentStandAdjustmentsAction(formData: FormData) {
   redirect(`/dashboard?shop=${shopId}&year=${year}&quarter=${quarter}&saved=stand`);
 }
 
-function numberValueFromRaw(rawValue: FormDataEntryValue) {
-  const value = Number(String(rawValue).replace(",", ".").trim());
+export async function resetSelectedQuarterKpiDataAction(formData: FormData) {
+  const shopId = requiredString(formData, "shop_id");
+  const year = intValue(formData, "year");
+  const quarter = intValue(formData, "quarter") as Quarter;
+  const confirmation = requiredString(formData, "confirmation");
+
+  if (confirmation !== "RESET") {
+    redirect(`/settings/targets?shop=${shopId}&year=${year}&quarter=${quarter}&error=reset_confirmation`);
+  }
+
+  const supabase = await assertCanManageShop(shopId);
+  const { startDate, endDate } = getQuarterBounds(year, quarter);
+  const quarterWeeks = listQuarterWeeks(year, quarter).map((week) => week.week);
+
+  const { error: targetsError } = await supabase
+    .from("quarterly_targets")
+    .update({ target_value: 0, note: null })
+    .eq("shop_id", shopId)
+    .eq("year", year)
+    .eq("quarter", quarter);
+
+  if (targetsError) {
+    throw new Error(targetsError.message);
+  }
+
+  const { error: entriesError } = await supabase
+    .from("daily_kpi_entries")
+    .delete()
+    .eq("shop_id", shopId)
+    .gte("entry_date", startDate)
+    .lte("entry_date", endDate);
+
+  if (entriesError) {
+    throw new Error(entriesError.message);
+  }
+
+  if (quarterWeeks.length) {
+    const { error: tnpsError } = await supabase
+      .from("tnps_entries")
+      .delete()
+      .eq("shop_id", shopId)
+      .eq("year", year)
+      .in("calendar_week", quarterWeeks);
+
+    if (tnpsError) {
+      throw new Error(tnpsError.message);
+    }
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/analysis");
+  revalidatePath("/entries");
+  revalidatePath("/kpi-table");
+  revalidatePath("/settings/targets");
+  redirect(`/settings/targets?shop=${shopId}&year=${year}&quarter=${quarter}&reset=1`);
+}
+
+function numberValueFromRaw(rawValue: FormDataEntryValue, fallback: number | null = null) {
+  const normalized = String(rawValue).replace(",", ".").trim();
+
+  if (!normalized) {
+    return fallback;
+  }
+
+  const value = Number(normalized);
 
   return Number.isFinite(value) ? value : null;
 }

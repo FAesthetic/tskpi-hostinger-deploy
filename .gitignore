@@ -5,6 +5,7 @@ next 2.config.mjs
 supabase/config 2.toml
 supabase/.branches/
 supabase/.temp/
+agent-scripts/
 
 # dependencies
 node_modules

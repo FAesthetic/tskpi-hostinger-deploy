@@ -118,9 +118,24 @@ export async function updateUserAccessAction(formData: FormData) {
     let lastError: string | null = null;
 
     for (const payload of payloads) {
-      const { error } = await supabase.from("shop_memberships").upsert(payload, {
-        onConflict: "shop_id,user_id"
-      });
+      const { data: existingRows, error: selectError } = await supabase
+        .from("shop_memberships")
+        .select("id")
+        .eq("shop_id", shopId)
+        .eq("user_id", userId)
+        .returns<Array<{ id: string }>>();
+
+      if (selectError) {
+        return selectError.message;
+      }
+
+      const { error } = existingRows?.length
+        ? await supabase
+            .from("shop_memberships")
+            .update(payload)
+            .eq("shop_id", shopId)
+            .eq("user_id", userId)
+        : await supabase.from("shop_memberships").insert(payload);
 
       if (!error) {
         return null;

@@ -16,7 +16,7 @@ import {
   Zap,
   type LucideIcon
 } from "lucide-react";
-import { saveCurrentStandAdjustmentsAction } from "@/app/actions/kpi";
+import { saveCurrentStandAdjustmentsAction, saveWeeklyKpiEntryAction } from "@/app/actions/kpi";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 import { displayCategoryLabel, displayKpiName, displayUnitLabel } from "@/lib/kpi/display";
 
@@ -161,6 +161,9 @@ export function DashboardKpiExplorer({
       <KpiDetailModal
         kpi={selectedKpi}
         onClose={() => setSelectedKpi(null)}
+        quarter={quarter}
+        shopId={shopId}
+        year={year}
       />
     </>
   );
@@ -184,6 +187,7 @@ function KpiCockpitCard({
   const forecastPercent = card.runratePercent ?? card.achievementPercent;
   const displayName = displayKpiName(card.code, card.name);
   const categoryLabel = displayCategoryLabel(card.category);
+  const insight = buildStatusInsight(card);
 
   return (
     <article className="group rounded-2xl border border-white/[0.08] bg-ink-900/95 p-5 shadow-cockpit transition duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:bg-[#1B1C1F]">
@@ -225,6 +229,10 @@ function KpiCockpitCard({
             style={{ width: `${Math.min(Math.max(forecastPercent ?? 0, 0), 100)}%` }}
           />
         </div>
+
+        <p className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-sm leading-6 text-slate-300">
+          {insight}
+        </p>
 
         <div className="mt-5 grid grid-cols-2 gap-4 border-t border-white/[0.08] pt-4 text-sm">
           <MetricLabel label="Ziel" value={formatValue(card.target, card.valueType, card.unit)} />
@@ -276,8 +284,8 @@ function KpiCockpitCard({
                 placeholder={displayUnitLabel(card.valueType, card.unit)}
                 type="number"
               />
-              <p className="text-[11px] font-medium normal-case tracking-normal text-slate-500">
-                Stand heute im Quartal. Enter oder Feld verlassen aktualisiert automatisch.
+          <p className="text-[11px] font-medium normal-case tracking-normal text-slate-500">
+                Das ist der Gesamtstand im Quartal. Wenn Wochen fehlen, setzt TS KPI nur einen pauschalen Ausgleich bis zu diesem Stand.
               </p>
             </div>
           </label>
@@ -289,10 +297,16 @@ function KpiCockpitCard({
 
 function KpiDetailModal({
   kpi,
-  onClose
+  onClose,
+  quarter,
+  shopId,
+  year
 }: {
   kpi: DashboardKpiCardData | null;
   onClose: () => void;
+  quarter: number;
+  shopId: string;
+  year: number;
 }) {
   useEffect(() => {
     if (!kpi) {
@@ -412,7 +426,12 @@ function KpiDetailModal({
           </div>
 
           <div className="grid gap-5">
-            <KpiWeeklyOverview kpi={kpi} />
+            <KpiWeeklyOverview
+              kpi={kpi}
+              quarter={quarter}
+              shopId={shopId}
+              year={year}
+            />
           </div>
         </div>
       </section>
@@ -420,21 +439,41 @@ function KpiDetailModal({
   );
 }
 
-function KpiWeeklyOverview({ kpi }: { kpi: DashboardKpiCardData }) {
+function KpiWeeklyOverview({
+  kpi,
+  quarter,
+  shopId,
+  year
+}: {
+  kpi: DashboardKpiCardData;
+  quarter: number;
+  shopId: string;
+  year: number;
+}) {
   const maxValue = Math.max(...kpi.weekPoints.map((week) => week.value), 1);
+  const isEditable = kpi.valueType !== "score";
 
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-white">Wochenuebersicht</h3>
-        <p className="text-sm text-slate-500">Historie nach Kalenderwochen, statt Tagesrauschen.</p>
+        <p className="text-sm text-slate-500">
+          Bearbeite hier die KW-Werte. Leere Felder werden als 0 gespeichert.
+        </p>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {kpi.weekPoints.map((week) => (
-          <div
+          <form
+            action={saveWeeklyKpiEntryAction}
             className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3"
             key={week.key}
           >
+            <input name="shop_id" type="hidden" value={shopId} />
+            <input name="kpi_definition_id" type="hidden" value={kpi.id} />
+            <input name="year" type="hidden" value={year} />
+            <input name="quarter" type="hidden" value={quarter} />
+            <input name="week_key" type="hidden" value={week.key} />
+            <input name="week_start" type="hidden" value={week.startDate} />
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-white">{week.label}</span>
               <span className="text-sm font-semibold text-slate-300">
@@ -447,7 +486,43 @@ function KpiWeeklyOverview({ kpi }: { kpi: DashboardKpiCardData }) {
                 style={{ width: `${Math.min((week.value / maxValue) * 100, 100)}%` }}
               />
             </div>
-          </div>
+            {isEditable ? (
+              <div className="mt-3 grid gap-1">
+                <label className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Wochenwert
+                </label>
+                <div className="relative">
+                  <input
+                    className="h-10 w-full rounded-xl border border-white/[0.09] bg-ink-800 px-3 pr-16 text-right text-sm font-semibold text-white outline-none transition placeholder:text-slate-600 focus:border-pulse-500/60 focus:ring-2 focus:ring-pulse-500/10"
+                    defaultValue={week.manualValue || ""}
+                    inputMode={kpi.valueType === "money" ? "decimal" : "numeric"}
+                    min="0"
+                    name="value"
+                    onBlur={(event) => event.currentTarget.form?.requestSubmit()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    placeholder="0"
+                    step={kpi.valueType === "money" ? "0.01" : "1"}
+                    type="number"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">
+                    {kpi.valueType === "money" ? "EUR" : kpi.unit || "Stk"}
+                  </span>
+                </div>
+                <button className="sr-only" type="submit">
+                  KW speichern
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                tNPS pflegst du weiterhin im tNPS-Verlauf, weil der Wert nicht additiv ist.
+              </p>
+            )}
+          </form>
         ))}
       </div>
     </div>
@@ -655,4 +730,53 @@ function statusLabel(status: StatusTone) {
   };
 
   return labels[status];
+}
+
+function buildStatusInsight(kpi: DashboardKpiCardData) {
+  if (kpi.target <= 0) {
+    return "Noch kein Ziel hinterlegt. Pflege zuerst ein Ziel, dann bewertet TS KPI Runrate und Risiko.";
+  }
+
+  const runratePercent = kpi.runratePercent ?? 0;
+  const gapToTarget = Math.max(100 - runratePercent, 0);
+  const required = formatAverage(kpi.requiredDaily100, kpi);
+  const name = displayKpiName(kpi.code, kpi.name);
+
+  if (kpi.status === "green") {
+    const variants = [
+      `${name} ist auf Kurs. Wenn das Tempo bleibt, landest du bei ${formatPercent(runratePercent)}% Zielerreichung.`,
+      `Stabiler Pfad: Die Runrate liegt ueber Ziel. Jetzt absichern und nicht nachlassen.`,
+      `Guter Wert: Prognose ${formatPercent(runratePercent)}%. Fokus nur halten, kein Feuerwehreinsatz noetig.`
+    ];
+
+    return pickVariant(variants, kpi.id);
+  }
+
+  if (kpi.status === "yellow") {
+    const variants = [
+      `${name} ist knapp unter Plan. Pro Rest-Arbeitstag brauchst du rund ${required}.`,
+      `Leichtes Risiko: Die Runrate liegt ${formatPercent(gapToTarget)} Prozentpunkte unter 100%.`,
+      `Aufholbar: Setze diese Woche kleine Zusatzimpulse, sonst kippt der KPI Richtung rot.`
+    ];
+
+    return pickVariant(variants, kpi.id);
+  }
+
+  if (kpi.status === "red") {
+    const variants = [
+      `${name} ist kritisch. Ab jetzt braucht ihr rund ${required} pro Arbeitstag bis 100%.`,
+      `Handlungsbedarf: Die Prognose liegt bei ${formatPercent(runratePercent)}%. Plane heute konkrete Massnahmen.`,
+      `Fokus-KPI: Ohne Tempoaenderung bleibt ihr deutlich unter Ziel. Erst Aktivitaeten, dann Ergebnis checken.`
+    ];
+
+    return pickVariant(variants, kpi.id);
+  }
+
+  return "Noch keine belastbare Bewertung. Sobald Ziel und Werte vorhanden sind, erscheinen konkrete Hinweise.";
+}
+
+function pickVariant(variants: string[], seed: string) {
+  const hash = seed.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+
+  return variants[hash % variants.length];
 }

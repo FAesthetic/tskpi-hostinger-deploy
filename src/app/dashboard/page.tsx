@@ -10,6 +10,7 @@ import {
   type DashboardKpiCardData
 } from "@/components/dashboard/DashboardKpiExplorer";
 import { KpiGraphPanel, type GraphSeries } from "@/components/dashboard/KpiGraphPanel";
+import { WeekPicker } from "@/components/dashboard/WeekPicker";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopCreatePanel } from "@/components/shops/ShopCreatePanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -950,24 +951,9 @@ function DailyInputPanel({
         </div>
       </div>
 
-      <form className="mt-5 grid gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4 md:grid-cols-[260px_auto] md:items-end">
-        <input name="shop" type="hidden" value={selectedShopId} />
-        <input name="year" type="hidden" value={year} />
-        <input name="quarter" type="hidden" value={quarter} />
-        <label className="grid gap-1 text-sm">
-          <span className="font-semibold text-slate-300">Kalenderwoche waehlen</span>
-          <select className="control-field" defaultValue={selectedWeek.key} name="week">
-            {quarterWeeks.map((week) => (
-              <option key={week.key} value={week.key}>
-                {week.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button className="secondary-button h-10 justify-self-start" type="submit">
-          KW laden
-        </button>
-      </form>
+      <div className="mt-5 max-w-sm rounded-xl border border-white/[0.08] bg-white/[0.025] p-4">
+        <WeekPicker selectedWeekKey={selectedWeek.key} weeks={quarterWeeks} />
+      </div>
 
       <form action={saveWeeklyKpiEntriesAction} className="mt-5 grid gap-5">
         <input name="shop_id" type="hidden" value={selectedShopId} />

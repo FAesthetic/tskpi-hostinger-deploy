@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Eye, EyeOff, Loader2, MailCheck } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -18,6 +19,7 @@ export function AuthForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const nextPath = searchParams.get("next") ?? "/dashboard";
   const isSignUp = mode === "sign-up";
@@ -45,6 +47,12 @@ export function AuthForm() {
     const emailRedirectTo = buildAuthRedirectUrl(nextPath);
 
     if (isSignUp) {
+      if (!requestedShopId && shops.length > 0) {
+        setIsLoading(false);
+        setError("Bitte waehle deinen Shop aus. Danach kann ein Admin deinen Zugang freigeben.");
+        return;
+      }
+
       const { error: signUpError } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
@@ -59,7 +67,7 @@ export function AuthForm() {
       setIsLoading(false);
 
       if (signUpError) {
-        setError(signUpError.message);
+        setError(formatAuthError(signUpError.message));
         return;
       }
 
@@ -74,7 +82,7 @@ export function AuthForm() {
         method: "POST"
       });
 
-      setMessage("Registrierung angelegt. Bitte pruefe dein E-Mail-Postfach.");
+      setMessage("Registrierung angelegt. Bitte bestaetige deine E-Mail. Danach wartet dein Zugang auf Admin-Freigabe.");
       return;
     }
 
@@ -86,7 +94,7 @@ export function AuthForm() {
     setIsLoading(false);
 
     if (signInError) {
-      setError(signInError.message);
+      setError(formatAuthError(signInError.message));
       return;
     }
 
@@ -95,6 +103,11 @@ export function AuthForm() {
   }
 
   async function handleMagicLink() {
+    if (!email.trim()) {
+      setError("Bitte gib zuerst deine E-Mail-Adresse ein.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setMessage(null);
@@ -109,11 +122,11 @@ export function AuthForm() {
     setIsLoading(false);
 
     if (otpError) {
-      setError(otpError.message);
+      setError(formatAuthError(otpError.message));
       return;
     }
 
-    setMessage("Magic Link gesendet. Bitte pruefe dein E-Mail-Postfach.");
+    setMessage("Magic Link gesendet. Oeffne den Link auf diesem Geraet oder kopiere ihn in deinen Browser.");
   }
 
   return (
@@ -132,12 +145,13 @@ export function AuthForm() {
       </div>
 
       {message ? (
-        <div className="rounded-md border border-pulse-500/20 bg-pulse-500/10 px-3 py-2 text-sm text-pulse-500">
-          {message}
+        <div className="flex gap-3 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-3 text-sm leading-6 text-emerald-100">
+          <MailCheck aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{message}</span>
         </div>
       ) : null}
       {error ? (
-        <div className="rounded-md border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <div className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-3 text-sm leading-6 text-red-100">
           {error}
         </div>
       ) : null}
@@ -161,16 +175,30 @@ export function AuthForm() {
         <label className="mb-1.5 block text-sm font-medium text-slate-300" htmlFor="password">
           Passwort
         </label>
-        <input
-          className="h-11 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 text-white outline-none transition placeholder:text-slate-600 focus:border-pulse-500 focus:ring-2 focus:ring-pulse-500/20"
-          id="password"
-          minLength={8}
-          name="password"
-          onChange={(event) => setPassword(event.target.value)}
-          required
-          type="password"
-          value={password}
-        />
+        <div className="relative">
+          <input
+            className="h-11 w-full rounded-md border border-white/10 bg-white/[0.04] px-3 pr-12 text-white outline-none transition placeholder:text-slate-600 focus:border-pulse-500 focus:ring-2 focus:ring-pulse-500/20"
+            id="password"
+            minLength={8}
+            name="password"
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            type={isPasswordVisible ? "text" : "password"}
+            value={password}
+          />
+          <button
+            aria-label={isPasswordVisible ? "Passwort verbergen" : "Passwort anzeigen"}
+            className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-slate-400 transition hover:bg-white/[0.06] hover:text-white"
+            onClick={() => setIsPasswordVisible((value) => !value)}
+            type="button"
+          >
+            {isPasswordVisible ? (
+              <EyeOff aria-hidden className="h-4 w-4" />
+            ) : (
+              <Eye aria-hidden className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </div>
 
       {isSignUp ? (
@@ -202,11 +230,12 @@ export function AuthForm() {
       ) : null}
 
       <button
-        className="h-11 rounded-md bg-pulse-600 px-4 text-sm font-semibold text-white transition hover:bg-pulse-700 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-pulse-600 px-4 text-sm font-semibold text-white transition hover:bg-pulse-700 disabled:cursor-not-allowed disabled:opacity-60"
         disabled={isLoading}
         type="submit"
       >
-        {isLoading ? "Bitte warten" : isSignUp ? "Account erstellen" : "Einloggen"}
+        {isLoading ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
+        {isLoading ? "Wird verarbeitet..." : isSignUp ? "Account erstellen" : "Einloggen"}
       </button>
 
       <button
@@ -236,7 +265,33 @@ export function AuthForm() {
 function buildAuthRedirectUrl(nextPath: string) {
   const configuredOrigin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
   const browserOrigin = typeof window !== "undefined" ? window.location.origin : "";
-  const origin = browserOrigin || configuredOrigin;
+  const origin = configuredOrigin || browserOrigin;
 
-  return `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+  return `${origin}/auth/callback?next=${encodeURIComponent(sanitizeNextPath(nextPath))}`;
+}
+
+function sanitizeNextPath(nextPath: string) {
+  if (!nextPath.startsWith("/") || nextPath.startsWith("//")) {
+    return "/dashboard";
+  }
+
+  return nextPath;
+}
+
+function formatAuthError(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("invalid login credentials")) {
+    return "E-Mail oder Passwort stimmt nicht. Bitte pruefe die Eingabe oder nutze den Magic Link.";
+  }
+
+  if (normalized.includes("email not confirmed")) {
+    return "Bitte bestaetige zuerst deine E-Mail-Adresse. Danach kann der Admin deinen Zugang freigeben.";
+  }
+
+  if (normalized.includes("user already registered")) {
+    return "Dieser Account existiert bereits. Wechsle bitte zu Einloggen oder nutze den Magic Link.";
+  }
+
+  return message;
 }
