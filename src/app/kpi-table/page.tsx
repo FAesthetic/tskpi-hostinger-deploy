@@ -12,6 +12,7 @@ import { calculateKpiMetric, type KpiMetric } from "@/lib/kpi/calculations";
 import { getQuarterBounds, summarizeQuarterWorkdays, toDateKey } from "@/lib/kpi/dates";
 import { displayCategoryLabel, displayKpiName } from "@/lib/kpi/display";
 import { formatKpiValue, formatNumber } from "@/lib/kpi/format";
+import { applyPipelineToMetric, buildFuturePortingPipeline } from "@/lib/portings/pipeline";
 
 type SearchParams = {
   shop?: string;
@@ -68,9 +69,18 @@ type SpecialDay = {
   date: string;
 };
 
+type PortingRow = {
+  date_unknown: boolean;
+  porting_date: string | null;
+  porting_type: "mobile_gk" | "mobile_pk";
+  provision_amount: number | null;
+  status: string;
+};
+
 type KpiTableRow = {
   kpi: KpiDefinition;
   metric: KpiMetric;
+  pipelineValue: number;
   required90: number | null;
   required100: number | null;
   restToTarget: number;
@@ -137,7 +147,7 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
   const sortKey = sortKeys.includes(searchParams.sort ?? "kpi") ? searchParams.sort ?? "kpi" : "kpi";
   const sortDir = searchParams.dir === "desc" ? "desc" : "asc";
 
-  const [kpisResult, targetsResult, entriesResult, openingsResult, closingsResult] =
+  const [kpisResult, targetsResult, entriesResult, openingsResult, closingsResult, portingsResult] =
     await Promise.all([
       context.supabase
         .from("kpi_definitions")
@@ -173,7 +183,12 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
         .eq("shop_id", selectedShop.id)
         .gte("date", startDate)
         .lte("date", endDate)
-        .returns<SpecialDay[]>()
+        .returns<SpecialDay[]>(),
+      context.supabase
+        .from("portings")
+        .select("porting_date, date_unknown, porting_type, provision_amount, status")
+        .eq("shop_id", selectedShop.id)
+        .returns<PortingRow[]>()
     ]);
 
   const kpis = (kpisResult.data ?? []).filter((kpi) => {
@@ -192,6 +207,7 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
   const entries = entriesResult.data ?? [];
   const openings = openingsResult.data ?? [];
   const closings = closingsResult.data ?? [];
+  const portings = portingsResult.data ?? [];
   const workdays = summarizeQuarterWorkdays({
     year,
     quarter,
@@ -200,25 +216,39 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
     specialClosings: closings
   });
   const targetMap = new Map(targets.map((target) => [target.kpi_definition_id, target.target_value]));
+  const kpiIdByCode = new Map(allKpis.map((kpi) => [kpi.code, kpi.id]));
+  const futurePortingPipelineMap = buildFuturePortingPipeline({
+    endDate,
+    kpiIdByCode,
+    portings,
+    today: toDateKey(new Date())
+  });
   const actualMap = entries.reduce<Map<string, number>>((map, entry) => {
     map.set(entry.kpi_definition_id, (map.get(entry.kpi_definition_id) ?? 0) + entry.value);
     return map;
   }, new Map());
   const rows = sortRows(
     kpis.map((kpi) => {
-      const metric = calculateKpiMetric({
+      const baseMetric = calculateKpiMetric({
         actual: actualMap.get(kpi.id) ?? 0,
         target: targetMap.get(kpi.id) ?? 0,
         elapsedWorkdays: workdays.elapsedWorkdays,
         remainingWorkdays: workdays.remainingWorkdays,
         totalWorkdays: workdays.totalWorkdays
       });
+      const pipelineValue = futurePortingPipelineMap.get(kpi.id) ?? 0;
+      const metric = applyPipelineToMetric({
+        metric: baseMetric,
+        pipelineValue,
+        remainingWorkdays: workdays.remainingWorkdays
+      });
 
       return {
         kpi,
         metric,
-        required90: requiredDailyForPercent(metric, 0.9, workdays.remainingWorkdays),
-        required100: requiredDailyForPercent(metric, 1, workdays.remainingWorkdays),
+        pipelineValue,
+        required90: requiredDailyForPercent(metric, 0.9, workdays.remainingWorkdays, pipelineValue),
+        required100: requiredDailyForPercent(metric, 1, workdays.remainingWorkdays, pipelineValue),
         restToTarget: Math.max(metric.target - metric.actual, 0)
       };
     }),
@@ -352,7 +382,7 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
             </thead>
             <tbody className="divide-y divide-white/10">
               {rows.length ? (
-                rows.map(({ kpi, metric, required90, required100, restToTarget }) => (
+                rows.map(({ kpi, metric, pipelineValue, required90, required100, restToTarget }) => (
                   <tr className="bg-ink-900/60 transition hover:bg-white/[0.04]" key={kpi.id}>
                     <td className="px-4 py-4 font-semibold text-white">
                       {displayKpiName(kpi.code, kpi.name)}
@@ -365,7 +395,14 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
                       {metric.achievementPercent === null ? "-" : `${formatNumber(metric.achievementPercent, 1)}%`}
                     </td>
                     <td className="px-4 py-4 text-slate-300">{formatKpiValue(metric.currentDailyAverage, kpi.value_type)}</td>
-                    <td className="px-4 py-4 text-slate-300">{formatKpiValue(metric.runrateForecast, kpi.value_type)}</td>
+                    <td className="px-4 py-4 text-slate-300">
+                      <span className="block">{formatKpiValue(metric.runrateForecast, kpi.value_type)}</span>
+                      {pipelineValue > 0 ? (
+                        <span className="mt-1 inline-flex rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
+                          +{formatKpiValue(pipelineValue, kpi.value_type)} Porting
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-4 text-slate-300">{formatKpiValue(metric.differenceToTarget, kpi.value_type)}</td>
                     <td className="px-4 py-4 text-slate-300">{formatKpiValue(required90, kpi.value_type)}</td>
                     <td className="px-4 py-4 text-slate-300">{formatKpiValue(required100, kpi.value_type)}</td>
@@ -563,8 +600,13 @@ function statusLabel(status: StatusTone) {
   return labels[status];
 }
 
-function requiredDailyForPercent(metric: KpiMetric, percent: number, remainingWorkdays: number) {
-  const remaining = Math.max(metric.target * percent - metric.actual, 0);
+function requiredDailyForPercent(
+  metric: KpiMetric,
+  percent: number,
+  remainingWorkdays: number,
+  pipelineValue = 0
+) {
+  const remaining = Math.max(metric.target * percent - metric.actual - pipelineValue, 0);
 
   if (remaining === 0) {
     return 0;

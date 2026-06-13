@@ -47,6 +47,7 @@ export type DashboardKpiCardData = {
   actual: number;
   target: number;
   dailyValue: number;
+  portingPipeline: number;
   quarterAdjustment: number;
   achievementPercent: number | null;
   currentDailyAverage: number | null;
@@ -248,6 +249,11 @@ function KpiCockpitCard({
           <span className="rounded-lg border border-pulse-500/20 bg-pulse-500/10 px-2 py-1 text-xs text-pulse-200">
             Runrate {formatPercent(forecastPercent)}%
           </span>
+          {card.portingPipeline > 0 ? (
+            <span className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200">
+              +{formatValue(card.portingPipeline, card.valueType, card.unit)} Pipeline
+            </span>
+          ) : null}
         </div>
 
         <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]">
@@ -260,6 +266,12 @@ function KpiCockpitCard({
         <p className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-sm leading-6 text-slate-300">
           {insight}
         </p>
+        {card.portingPipeline > 0 ? (
+          <p className="mt-2 rounded-xl border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-100">
+            Zukunftsportierungen sind in Prognose und Tagesbedarf beruecksichtigt, zaehlen aber
+            erst ab Portierungsdatum offiziell zum Ist-Stand.
+          </p>
+        ) : null}
 
         <div className="mt-5 grid grid-cols-2 gap-4 border-t border-white/[0.08] pt-4 text-sm">
           <MetricLabel label="Ziel" value={formatValue(card.target, card.valueType, card.unit)} />
@@ -268,6 +280,12 @@ function KpiCockpitCard({
             label="Runrate Wert"
             value={formatValue(card.runrateForecast, card.valueType, card.unit)}
           />
+          {card.portingPipeline > 0 ? (
+            <MetricLabel
+              label="Porting-Pipeline"
+              value={`+${formatValue(card.portingPipeline, card.valueType, card.unit)}`}
+            />
+          ) : null}
           <MetricLabel label="Runrate %" value={`${formatPercent(forecastPercent)}%`} />
           <MetricLabel label="pro Arbeitstag" value={formatAverage(card.requiredDaily100, card)} />
         </div>
@@ -410,6 +428,20 @@ function KpiDetailModal({
               value={formatAverage(kpi.requiredDaily100, kpi)}
             />
           </div>
+          {kpi.portingPipeline > 0 ? (
+            <div className="rounded-2xl border border-emerald-400/15 bg-emerald-400/[0.06] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                Portierungs-Pipeline
+              </p>
+              <p className="mt-2 text-xl font-semibold text-white">
+                +{formatValue(kpi.portingPipeline, kpi.valueType, kpi.unit)}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-emerald-100/80">
+                In Prognose und Restbedarf enthalten. Offiziell wird der Wert erst am
+                Portierungsdatum in den Ist-Stand gebucht.
+              </p>
+            </div>
+          ) : null}
 
           <div className={`rounded-2xl border p-5 ${forecastTone}`}>
             <div className="flex items-start gap-4">

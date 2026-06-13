@@ -29,6 +29,7 @@ import {
 import { displayCategoryLabel, displayKpiName } from "@/lib/kpi/display";
 import { formatKpiValue, formatNumber } from "@/lib/kpi/format";
 import { listQuarterWeeks, type IsoWeek } from "@/lib/kpi/weeks";
+import { applyPipelineToMetric, buildFuturePortingPipeline } from "@/lib/portings/pipeline";
 import { processDuePortingsForShop } from "@/lib/portings/process";
 import {
   getAuthenticatedAppContext,
@@ -76,6 +77,8 @@ type PortingSummary = {
   id: string;
   porting_date: string | null;
   date_unknown: boolean;
+  porting_type: "mobile_pk" | "mobile_gk";
+  provision_amount: number | null;
   status: "open" | "planned" | "effective" | "archived";
 };
 
@@ -95,6 +98,7 @@ type TnpsTarget = {
 type KpiRow = {
   kpi: KpiDefinition;
   metric: KpiMetric;
+  pipelineValue?: number;
 };
 
 type DailyTotalsByKpi = Map<string, Map<string, number>>;
@@ -191,7 +195,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       .returns<SpecialDay[]>(),
     context.supabase
       .from("portings")
-      .select("id, porting_date, date_unknown, status")
+      .select("id, porting_date, date_unknown, porting_type, provision_amount, status")
       .eq("shop_id", selectedShop.id)
       .returns<PortingSummary[]>(),
     context.supabase
@@ -239,6 +243,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   });
 
   const targetMap = new Map(targets.map((target) => [target.kpi_definition_id, target.target_value]));
+  const kpiIdByCode = new Map(kpis.map((kpi) => [kpi.code, kpi.id]));
+  const futurePortingPipelineMap = buildFuturePortingPipeline({
+    endDate,
+    kpiIdByCode,
+    portings,
+    today
+  });
   const actualMap = entries.reduce<Map<string, number>>((sum, entry) => {
     sum.set(entry.kpi_definition_id, (sum.get(entry.kpi_definition_id) ?? 0) + entry.value);
     return sum;
@@ -273,15 +284,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     }, new Map());
 
   const cards = kpis.map((kpi) => {
-    const metric = calculateKpiMetric({
+    const baseMetric = calculateKpiMetric({
       actual: actualMap.get(kpi.id) ?? 0,
       target: targetMap.get(kpi.id) ?? 0,
       elapsedWorkdays: workdays.elapsedWorkdays,
       remainingWorkdays: workdays.remainingWorkdays,
       totalWorkdays: workdays.totalWorkdays
     });
+    const pipelineValue = futurePortingPipelineMap.get(kpi.id) ?? 0;
+    const metric = applyPipelineToMetric({
+      metric: baseMetric,
+      pipelineValue,
+      remainingWorkdays: workdays.remainingWorkdays
+    });
 
-    return { kpi, metric };
+    return { kpi, metric, pipelineValue };
   });
 
   const measuredCards = cards.filter((card) => card.metric.target > 0);
@@ -319,6 +336,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const dashboardCards = buildDashboardKpiCards({
     cards,
     dailyTotalsByKpi,
+    futurePortingPipelineMap,
     quarterAdjustmentMap,
     quarter,
     weeklyManualMap,
@@ -1320,8 +1338,13 @@ function missingToPercent(metric: KpiMetric, percent: number) {
   return Math.max(metric.target * percent - metric.actual, 0);
 }
 
-function requiredDailyForPercent(metric: KpiMetric, percent: number, remainingWorkdays: number) {
-  const remaining = Math.max(metric.target * percent - metric.actual, 0);
+function requiredDailyForPercent(
+  metric: KpiMetric,
+  percent: number,
+  remainingWorkdays: number,
+  pipelineValue = 0
+) {
+  const remaining = Math.max(metric.target * percent - metric.actual - pipelineValue, 0);
 
   if (remaining === 0) {
     return 0;
@@ -1371,6 +1394,7 @@ function resolveWeek(weekKey: string | null | undefined, weeks: IsoWeek[], today
 function buildDashboardKpiCards({
   cards,
   dailyTotalsByKpi,
+  futurePortingPipelineMap,
   quarter,
   quarterAdjustmentMap,
   weeklyManualMap,
@@ -1379,6 +1403,7 @@ function buildDashboardKpiCards({
 }: {
   cards: KpiRow[];
   dailyTotalsByKpi: DailyTotalsByKpi;
+  futurePortingPipelineMap: Map<string, number>;
   quarter: Quarter;
   quarterAdjustmentMap: Map<string, number>;
   weeklyManualMap: Map<string, Map<string, number>>;
@@ -1437,10 +1462,21 @@ function buildDashboardKpiCards({
       lastEntry,
       name: kpi.name,
       points,
+      portingPipeline: futurePortingPipelineMap.get(kpi.id) ?? 0,
       quarterAdjustment: quarterAdjustmentMap.get(kpi.id) ?? 0,
       remainingWorkdays: workdays.remainingWorkdays,
-      requiredDaily90: requiredDailyForPercent(metric, 0.9, workdays.remainingWorkdays),
-      requiredDaily100: requiredDailyForPercent(metric, 1, workdays.remainingWorkdays),
+      requiredDaily90: requiredDailyForPercent(
+        metric,
+        0.9,
+        workdays.remainingWorkdays,
+        futurePortingPipelineMap.get(kpi.id) ?? 0
+      ),
+      requiredDaily100: requiredDailyForPercent(
+        metric,
+        1,
+        workdays.remainingWorkdays,
+        futurePortingPipelineMap.get(kpi.id) ?? 0
+      ),
       requiredDailyAverage: metric.requiredDailyAverage,
       restTo90: missingToPercent(metric, 0.9),
       restTo100: missingToPercent(metric, 1),
@@ -1515,6 +1551,7 @@ function buildTnpsDashboardCard({
     lastEntry: currentTnps ? { date: `KW ${currentTnps.calendar_week}`, value: actual } : null,
     name: "tNPS",
     points,
+    portingPipeline: 0,
     quarterAdjustment: 0,
     remainingWorkdays: workdays.remainingWorkdays,
     requiredDaily90: null,

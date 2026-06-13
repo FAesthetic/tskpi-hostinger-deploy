@@ -6,9 +6,10 @@ import {
   parseQuarterSearchParams,
   resolveSelectedShop
 } from "@/lib/data/app-context";
-import { getQuarterBounds } from "@/lib/kpi/dates";
+import { getQuarterBounds, toDateKey } from "@/lib/kpi/dates";
 import { displayCategoryLabel, displayKpiName } from "@/lib/kpi/display";
 import { listQuarterWeeks } from "@/lib/kpi/weeks";
+import { buildFuturePortingImpactEntries } from "@/lib/portings/pipeline";
 
 type SearchParams = {
   quarter?: string;
@@ -31,6 +32,14 @@ type DailyEntry = {
   entry_date: string;
   kpi_definition_id: string;
   value: number;
+};
+
+type PortingRow = {
+  date_unknown: boolean;
+  porting_date: string | null;
+  porting_type: "mobile_gk" | "mobile_pk";
+  provision_amount: number | null;
+  status: string;
 };
 
 export default async function AnalysisPage({ searchParams }: { searchParams: SearchParams }) {
@@ -63,7 +72,7 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Sea
   }
 
   const { startDate, endDate } = getQuarterBounds(year, quarter);
-  const [kpisResult, entriesResult] = await Promise.all([
+  const [kpisResult, entriesResult, portingsResult] = await Promise.all([
     context.supabase
       .from("kpi_definitions")
       .select("id, code, name, category, value_type, unit, sort_order")
@@ -78,11 +87,25 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Sea
       .gte("entry_date", startDate)
       .lte("entry_date", endDate)
       .neq("source", "quarter_adjustment")
-      .returns<DailyEntry[]>()
+      .returns<DailyEntry[]>(),
+    context.supabase
+      .from("portings")
+      .select("porting_date, date_unknown, porting_type, provision_amount, status")
+      .eq("shop_id", selectedShop.id)
+      .returns<PortingRow[]>()
   ]);
 
   const kpis = kpisResult.data ?? [];
-  const entries = entriesResult.data ?? [];
+  const kpiIdByCode = new Map(kpis.map((kpi) => [kpi.code, kpi.id]));
+  const entries = [
+    ...(entriesResult.data ?? []),
+    ...buildFuturePortingImpactEntries({
+      endDate,
+      kpiIdByCode,
+      portings: portingsResult.data ?? [],
+      today: toDateKey(new Date())
+    })
+  ];
   const weeks = listQuarterWeeks(year, quarter);
   const series = buildWeeklySeries(kpis, entries, weeks);
   const weekSummaries = buildWeekSummaries(series, weeks);

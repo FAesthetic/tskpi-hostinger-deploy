@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { generateDivaResponse, type DivaChatMessage } from "@/lib/ai/openai";
 import { calculateKpiMetric } from "@/lib/kpi/calculations";
-import { getQuarterBounds, summarizeQuarterWorkdays, type Quarter } from "@/lib/kpi/dates";
+import { getQuarterBounds, summarizeQuarterWorkdays, toDateKey, type Quarter } from "@/lib/kpi/dates";
 import { displayCategoryLabel, displayKpiName } from "@/lib/kpi/display";
 import { formatKpiValue, formatNumber } from "@/lib/kpi/format";
 import { listQuarterWeeks } from "@/lib/kpi/weeks";
+import { applyPipelineToMetric, buildFuturePortingPipeline } from "@/lib/portings/pipeline";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -210,6 +211,13 @@ async function buildDivaContext({
     year
   });
   const targetMap = new Map(targets.map((target) => [target.kpi_definition_id, Number(target.target_value)]));
+  const kpiIdByCode = new Map(kpis.map((kpi) => [kpi.code, kpi.id]));
+  const futurePortingPipelineMap = buildFuturePortingPipeline({
+    endDate,
+    kpiIdByCode,
+    portings: portingsResult.data ?? [],
+    today: toDateKey(new Date())
+  });
   const actualMap = entries.reduce<Map<string, number>>((sum, entry) => {
     sum.set(entry.kpi_definition_id, (sum.get(entry.kpi_definition_id) ?? 0) + Number(entry.value));
     return sum;
@@ -217,12 +225,18 @@ async function buildDivaContext({
   const kpiRows = kpis.map((kpi) => {
     const actual = actualMap.get(kpi.id) ?? 0;
     const target = targetMap.get(kpi.id) ?? 0;
-    const metric = calculateKpiMetric({
+    const baseMetric = calculateKpiMetric({
       actual,
       elapsedWorkdays: workdays.elapsedWorkdays,
       remainingWorkdays: workdays.remainingWorkdays,
       target,
       totalWorkdays: workdays.totalWorkdays
+    });
+    const pipelineValue = futurePortingPipelineMap.get(kpi.id) ?? 0;
+    const metric = applyPipelineToMetric({
+      metric: baseMetric,
+      pipelineValue,
+      remainingWorkdays: workdays.remainingWorkdays
     });
     const runratePercent =
       metric.runrateForecast !== null && target > 0 ? (metric.runrateForecast / target) * 100 : null;
@@ -233,6 +247,8 @@ async function buildDivaContext({
       category: displayCategoryLabel(kpi.category),
       code: kpi.code,
       kpi: displayKpiName(kpi.code, kpi.name),
+      portingPipeline: pipelineValue,
+      portingPipelineLabel: formatKpiValue(pipelineValue, kpi.value_type),
       requiredPerRestWorkday: metric.requiredDailyAverage,
       requiredPerRestWorkdayLabel: formatKpiValue(metric.requiredDailyAverage, kpi.value_type),
       runrateForecast: metric.runrateForecast,
