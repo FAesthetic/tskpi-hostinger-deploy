@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { generateMorningBriefing } from "@/lib/ai/openai";
 import { calculateKpiMetric, type KpiMetric } from "@/lib/kpi/calculations";
 import { getCurrentQuarter, getQuarterBounds, summarizeQuarterWorkdays } from "@/lib/kpi/dates";
 import { displayCategoryLabel, displayKpiName } from "@/lib/kpi/display";
@@ -266,7 +267,7 @@ async function buildBriefingPayload(supabase: BriefingSupabaseClient, shop: Shop
   const dslTvRatio = buildRatioInsight(rows, "units_broadband_pk", "units_tv", "DSL", "TV");
   const mobileRatio = buildRatioInsight(rows, "units_mobile_pk", "units_mobile_gk", "MF PK", "MF GK");
   const dataCare = buildDataCareReminder(entries);
-  const analysisText = buildAnalysisText({
+  const fallbackAnalysisText = buildAnalysisText({
     critical,
     dataCare,
     dslTvRatio,
@@ -277,8 +278,28 @@ async function buildBriefingPayload(supabase: BriefingSupabaseClient, shop: Shop
     topPerformer,
     workdays
   });
+  const aiAnalysisText = await generateMorningBriefing({
+    dataCare,
+    dslTvRatio,
+    mobileRatio,
+    rows: rows.map((row) => ({
+      actual: row.actual,
+      category: row.category,
+      kpi: row.kpi,
+      requiredPerWorkday100: row.metric.requiredDailyAverage,
+      runratePercent: row.runratePercent,
+      status: row.metric.status,
+      target: row.target,
+      valueType: row.valueType
+    })),
+    shopName: shop.name,
+    todayLabel,
+    workdays
+  });
+  const analysisText = aiAnalysisText ?? fallbackAnalysisText;
 
   return {
+    analysisMode: aiAnalysisText ? "openai" : "rules",
     analysisText,
     emailBody: analysisText,
     emailSubject: `TS KPI Morgenbriefing: ${shop.name}`,

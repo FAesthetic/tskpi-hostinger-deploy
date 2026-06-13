@@ -16,6 +16,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ShopCreatePanel } from "@/components/shops/ShopCreatePanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SubmitButton } from "@/components/ui/SubmitButton";
+import { generateTodayImportantInsight } from "@/lib/ai/openai";
 import { calculateKpiMetric, type KpiMetric } from "@/lib/kpi/calculations";
 import {
   getQuarterBounds,
@@ -332,6 +333,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     workdays,
     year
   });
+  const aiTodayImportant = await generateTodayImportantInsight({
+    critical: critical ? toAiKpiInput(critical) : null,
+    portingsWithoutDate,
+    remainingWorkdays: workdays.remainingWorkdays,
+    runnerUp: focusCards[1] ? toAiKpiInput(focusCards[1]) : null,
+    shopName: selectedShop.name,
+    topPerformer: stableCards[0] ? toAiKpiInput(stableCards[0]) : null
+  });
 
   return (
     <AppShell
@@ -344,6 +353,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       year={year}
     >
       <CommandHero
+        aiTodayImportant={aiTodayImportant}
         critical={critical}
         focusCards={focusCards}
         overallTone={overallTone}
@@ -509,12 +519,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
 }
 
 function CommandHero({
+  aiTodayImportant,
   critical,
   focusCards,
   overallTone,
   portingsWithoutDate,
   remainingWorkdays
 }: {
+  aiTodayImportant: string | null;
   critical: KpiRow | null;
   focusCards: KpiRow[];
   overallTone: "green" | "yellow" | "red" | "neutral";
@@ -549,7 +561,12 @@ function CommandHero({
             Heute wichtig
           </p>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-            {critical ? (
+            {aiTodayImportant ? (
+              <>
+                <span className="font-semibold text-white">AI-Fokus: </span>
+                {aiTodayImportant}
+              </>
+            ) : critical ? (
               <>
                 <span className="font-semibold text-white">
                   Heute wichtig: {displayKpiName(critical.kpi.code, critical.kpi.name)}.
@@ -1319,6 +1336,19 @@ function forecastAchievementPercent(metric: KpiMetric) {
   }
 
   return (metric.runrateForecast / metric.target) * 100;
+}
+
+function toAiKpiInput(row: KpiRow) {
+  return {
+    actual: row.metric.actual,
+    category: displayCategoryLabel(row.kpi.category),
+    kpi: displayKpiName(row.kpi.code, row.kpi.name),
+    requiredPerWorkday100: row.metric.requiredDailyAverage,
+    runratePercent: forecastAchievementPercent(row.metric),
+    status: statusLabel(row.metric.status),
+    target: row.metric.target,
+    valueType: row.kpi.value_type
+  };
 }
 
 function resolveWeek(weekKey: string | null | undefined, weeks: IsoWeek[], today: string): IsoWeek {
