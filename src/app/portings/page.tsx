@@ -139,6 +139,8 @@ export default async function PortingsPage({ searchParams }: { searchParams: Sea
           </p>
           <form action={processDuePortingsAction} className="mt-3">
             <input name="shop_id" type="hidden" value={selectedShop.id} />
+            <input name="year" type="hidden" value={year} />
+            <input name="quarter" type="hidden" value={quarter} />
             <button className="primary-button h-10">Faellige buchen</button>
           </form>
         </div>
@@ -168,12 +170,19 @@ export default async function PortingsPage({ searchParams }: { searchParams: Sea
       <section className="grid gap-5 lg:grid-cols-[0.78fr_1.22fr]">
         <div className="cockpit-card p-5">
           <h2 className="text-xl font-semibold text-white">Portierung erfassen</h2>
-          <PortingForm shopId={selectedShop.id} tariffs={tariffs.filter((tariff) => tariff.is_active)} />
+          <PortingForm
+            quarter={quarter}
+            shopId={selectedShop.id}
+            tariffs={tariffs.filter((tariff) => tariff.is_active)}
+            year={year}
+          />
         </div>
 
         <PortingTable
           archiveEnabled
+          quarter={quarter}
           portings={withDate}
+          selectedYear={year}
           tariffMap={tariffMap}
           title={`Portierungen Q${quarter} ${year}`}
         />
@@ -181,7 +190,9 @@ export default async function PortingsPage({ searchParams }: { searchParams: Sea
 
       <PortingTable
         archiveEnabled
+        quarter={quarter}
         portings={withoutDate}
+        selectedYear={year}
         tariffMap={tariffMap}
         title="Ohne Datum"
       />
@@ -241,10 +252,22 @@ function FilterForm({
   );
 }
 
-function PortingForm({ shopId, tariffs }: { shopId: string; tariffs: Tariff[] }) {
+function PortingForm({
+  shopId,
+  tariffs,
+  year,
+  quarter
+}: {
+  shopId: string;
+  tariffs: Tariff[];
+  year: number;
+  quarter: number;
+}) {
   return (
     <form action={savePortingAction} className="mt-5 grid gap-4">
       <input name="shop_id" type="hidden" value={shopId} />
+      <input name="year" type="hidden" value={year} />
+      <input name="quarter" type="hidden" value={quarter} />
       <Field label="Kunde / Name" name="customer_name" />
       <Select label="Typ" name="porting_type">
         <option value="mobile_pk">Mobilfunk PK</option>
@@ -278,12 +301,16 @@ function PortingTable({
   title,
   portings,
   tariffMap,
-  archiveEnabled
+  archiveEnabled,
+  selectedYear,
+  quarter
 }: {
   title: string;
   portings: Porting[];
   tariffMap: Map<string, Tariff>;
   archiveEnabled?: boolean;
+  selectedYear?: number;
+  quarter?: number;
 }) {
   return (
     <section className="cockpit-card p-5">
@@ -328,6 +355,8 @@ function PortingTable({
                       <form action={archivePortingAction}>
                         <input name="shop_id" type="hidden" value={porting.shop_id} />
                         <input name="id" type="hidden" value={porting.id} />
+                        {selectedYear ? <input name="year" type="hidden" value={selectedYear} /> : null}
+                        {quarter ? <input name="quarter" type="hidden" value={quarter} /> : null}
                         <button className="secondary-button px-3 py-1.5 text-xs">
                           Archivieren
                         </button>

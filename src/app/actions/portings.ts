@@ -26,6 +26,22 @@ function numberValue(formData: FormData, key: string, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function contextPath(path: string, formData: FormData, shopId: string) {
+  const params = new URLSearchParams({ shop: shopId });
+  const year = optionalString(formData, "year");
+  const quarter = optionalString(formData, "quarter");
+
+  if (year) {
+    params.set("year", year);
+  }
+
+  if (quarter) {
+    params.set("quarter", quarter);
+  }
+
+  return `${path}?${params.toString()}`;
+}
+
 async function assertCanManageShop(shopId: string) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("can_manage_shop", {
@@ -73,7 +89,7 @@ export async function saveTariffAction(formData: FormData) {
 
   revalidatePath("/settings/tariffs");
   revalidatePath("/portings");
-  redirect(`/settings/tariffs?shop=${shopId}`);
+  redirect(contextPath("/settings/tariffs", formData, shopId));
 }
 
 export async function seedTariffTemplatesAction(formData: FormData) {
@@ -106,7 +122,7 @@ export async function seedTariffTemplatesAction(formData: FormData) {
 
   revalidatePath("/settings/tariffs");
   revalidatePath("/portings");
-  redirect(`/settings/tariffs?shop=${shopId}`);
+  redirect(contextPath("/settings/tariffs", formData, shopId));
 }
 
 export async function savePortingAction(formData: FormData) {
@@ -168,7 +184,7 @@ export async function savePortingAction(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath("/portings");
-  redirect(`/portings?shop=${shopId}`);
+  redirect(contextPath("/portings", formData, shopId));
 }
 
 const tariffTemplates = [
@@ -227,7 +243,7 @@ export async function archivePortingAction(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath("/portings");
-  redirect(`/portings?shop=${shopId}`);
+  redirect(contextPath("/portings", formData, shopId));
 }
 
 export async function processDuePortingsAction(formData: FormData) {
@@ -238,5 +254,5 @@ export async function processDuePortingsAction(formData: FormData) {
 
   revalidatePath("/dashboard");
   revalidatePath("/portings");
-  redirect(`/portings?shop=${shopId}`);
+  redirect(contextPath("/portings", formData, shopId));
 }

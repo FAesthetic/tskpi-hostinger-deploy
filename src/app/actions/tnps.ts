@@ -34,6 +34,10 @@ function numberValue(formData: FormData, key: string) {
   return value;
 }
 
+function optionalString(formData: FormData, key: string) {
+  return String(formData.get(key) ?? "").trim() || null;
+}
+
 async function assertCanManageShop(shopId: string) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("can_manage_shop", {
@@ -79,5 +83,12 @@ export async function saveTnpsEntryAction(formData: FormData) {
 
   revalidatePath("/tnps");
   revalidatePath("/dashboard");
-  redirect(`/tnps?shop=${shopId}&year=${year}`);
+  const params = new URLSearchParams({ shop: shopId, year: String(year) });
+  const quarter = optionalString(formData, "quarter");
+
+  if (quarter) {
+    params.set("quarter", quarter);
+  }
+
+  redirect(`/tnps?${params.toString()}`);
 }

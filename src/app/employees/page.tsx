@@ -114,13 +114,15 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
             <p className="mt-2 text-sm leading-6 text-slate-400">
               Interne Notizen und Feedback bleiben nur fuer Admin und TSL sichtbar.
             </p>
-            <EmployeeForm shopId={selectedShop.id} />
+            <EmployeeForm quarter={quarter} shopId={selectedShop.id} year={year} />
           </section>
 
           <section className="cockpit-card p-5">
             <h2 className="text-xl font-semibold text-white">Krankentag erfassen</h2>
             <form action={saveSickDayAction} className="mt-5 grid gap-4">
               <input name="shop_id" type="hidden" value={selectedShop.id} />
+              <input name="year" type="hidden" value={year} />
+              <input name="quarter" type="hidden" value={quarter} />
               <Select label="Mitarbeiter" name="employee_id">
                 {employees.map((employee) => (
                   <option key={employee.id} value={employee.id}>
@@ -183,6 +185,8 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
                     <form action={saveEmployeeAction} className="grid gap-3 rounded-lg border border-white/10 bg-black/15 p-4">
                       <input name="id" type="hidden" value={employee.id} />
                       <input name="shop_id" type="hidden" value={selectedShop.id} />
+                      <input name="year" type="hidden" value={year} />
+                      <input name="quarter" type="hidden" value={quarter} />
                       <Field label="Name" name="name" value={employee.name} />
                       <Field label="Rolle / Funktion" name="function_title" value={employee.function_title ?? ""} />
                       <Field label="Eintrittsdatum" name="start_date" type="date" value={employee.start_date ?? ""} />
@@ -249,10 +253,20 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Se
   );
 }
 
-function EmployeeForm({ shopId }: { shopId: string }) {
+function EmployeeForm({
+  shopId,
+  year,
+  quarter
+}: {
+  shopId: string;
+  year: number;
+  quarter: number;
+}) {
   return (
     <form action={saveEmployeeAction} className="mt-6 grid gap-4">
       <input name="shop_id" type="hidden" value={shopId} />
+      <input name="year" type="hidden" value={year} />
+      <input name="quarter" type="hidden" value={quarter} />
       <Field label="Name" name="name" />
       <Field label="Rolle / Funktion" name="function_title" />
       <Field label="Eintrittsdatum" name="start_date" type="date" />

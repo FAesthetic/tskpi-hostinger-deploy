@@ -82,7 +82,7 @@ export default async function TariffsPage({ searchParams }: { searchParams: Sear
           <p className="mt-2 text-sm leading-6 text-slate-400">
             Tarife steuern die automatische Provision in der Portierungsliste.
           </p>
-          <TariffForm shopId={selectedShop.id} />
+          <TariffForm quarter={quarter} shopId={selectedShop.id} year={year} />
         </div>
 
         <div className="cockpit-card p-5">
@@ -95,6 +95,8 @@ export default async function TariffsPage({ searchParams }: { searchParams: Sear
             </div>
             <form action={seedTariffTemplatesAction}>
               <input name="shop_id" type="hidden" value={selectedShop.id} />
+              <input name="year" type="hidden" value={year} />
+              <input name="quarter" type="hidden" value={quarter} />
               <button className="secondary-button h-10" type="submit">
                 Telekom-Vorlagen anlegen
               </button>
@@ -110,6 +112,8 @@ export default async function TariffsPage({ searchParams }: { searchParams: Sear
                 >
                   <input name="id" type="hidden" value={tariff.id} />
                   <input name="shop_id" type="hidden" value={selectedShop.id} />
+                  <input name="year" type="hidden" value={year} />
+                  <input name="quarter" type="hidden" value={quarter} />
                   <label className="grid gap-1 text-sm">
                     <span className="text-slate-400">Name</span>
                     <input className={inputClass} defaultValue={tariff.name} name="name" />
@@ -166,10 +170,20 @@ export default async function TariffsPage({ searchParams }: { searchParams: Sear
   );
 }
 
-function TariffForm({ shopId }: { shopId: string }) {
+function TariffForm({
+  shopId,
+  year,
+  quarter
+}: {
+  shopId: string;
+  year: number;
+  quarter: number;
+}) {
   return (
     <form action={saveTariffAction} className="mt-6 grid gap-4">
       <input name="shop_id" type="hidden" value={shopId} />
+      <input name="year" type="hidden" value={year} />
+      <input name="quarter" type="hidden" value={quarter} />
       <label className="grid gap-1 text-sm">
         <span className="font-medium text-slate-300">Name</span>
         <input className={inputClass} name="name" placeholder="MagentaMobil M" required />

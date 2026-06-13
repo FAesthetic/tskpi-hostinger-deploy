@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { appUrl } from "@/lib/url";
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
@@ -49,12 +50,15 @@ export async function updateSession(request: NextRequest) {
 
   const protectedPrefixes = [
     "/dashboard",
+    "/analysis",
     "/shops",
     "/entries",
     "/portings",
     "/tnps",
     "/reports",
     "/compare",
+    "/kpi-table",
+    "/statistics",
     "/settings",
     "/employees",
     "/admin"
@@ -65,16 +69,16 @@ export async function updateSession(request: NextRequest) {
   );
 
   if (!user && isProtectedRoute) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("next", request.nextUrl.pathname);
+    const redirectUrl = appUrl("/login", request);
+    redirectUrl.searchParams.set(
+      "next",
+      `${request.nextUrl.pathname}${request.nextUrl.search}`
+    );
     return NextResponse.redirect(redirectUrl);
   }
 
   if (user && isAuthRoute) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard";
-    redirectUrl.search = "";
+    const redirectUrl = appUrl("/dashboard", request);
     return NextResponse.redirect(redirectUrl);
   }
 

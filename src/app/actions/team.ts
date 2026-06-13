@@ -18,6 +18,22 @@ function optionalString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim() || null;
 }
 
+function contextPath(path: string, formData: FormData, shopId: string) {
+  const params = new URLSearchParams({ shop: shopId });
+  const year = optionalString(formData, "year");
+  const quarter = optionalString(formData, "quarter");
+
+  if (year) {
+    params.set("year", year);
+  }
+
+  if (quarter) {
+    params.set("quarter", quarter);
+  }
+
+  return `${path}?${params.toString()}`;
+}
+
 async function assertCanManageEmployees(shopId: string) {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("can_view_employee_data", {
@@ -64,7 +80,7 @@ export async function saveEmployeeAction(formData: FormData) {
   }
 
   revalidatePath("/employees");
-  redirect(`/employees?shop=${shopId}`);
+  redirect(contextPath("/employees", formData, shopId));
 }
 
 export async function saveSickDayAction(formData: FormData) {
@@ -93,5 +109,5 @@ export async function saveSickDayAction(formData: FormData) {
   }
 
   revalidatePath("/employees");
-  redirect(`/employees?shop=${shopId}`);
+  redirect(contextPath("/employees", formData, shopId));
 }

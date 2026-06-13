@@ -128,6 +128,7 @@ export default async function TnpsPage({ searchParams }: { searchParams: SearchP
             </h1>
             <form action={saveTnpsEntryAction} className="mt-6 grid gap-4">
               <input name="shop_id" type="hidden" value={selectedShop.id} />
+              <input name="quarter" type="hidden" value={quarter} />
               <Field label="Jahr" name="year" type="number" value={String(year)} />
               <Field label="Kalenderwoche" name="calendar_week" type="number" />
               <Field label="Wert" name="value" type="number" />
