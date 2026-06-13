@@ -1,0 +1,34 @@
+{
+  "name": "ts-kpi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:clean": "export PATH=\"/Users/finn/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH\" && if [ -d .next ]; then mv .next .next-corrupt-$(date +%Y%m%d-%H%M%S) 2>/dev/null || rm -rf .next; fi && next dev -H 127.0.0.1 -p 3000",
+    "dev:reset": "export PATH=\"/Users/finn/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin:$PATH\" && for p in 3000 3001 3004 3010; do ids=$(lsof -ti tcp:$p 2>/dev/null); [ -n \"$ids\" ] && kill -9 $ids || true; done && if [ -d .next ]; then mv .next .next-corrupt-$(date +%Y%m%d-%H%M%S) 2>/dev/null || rm -rf .next; fi && next dev -H 127.0.0.1 -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.108.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.17.0",
+    "next": "^14.2.23",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.14",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.23",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}

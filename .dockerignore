@@ -1,0 +1,19 @@
+.DS_Store
+.git
+.github
+.next
+.next-*
+.vercel
+node_modules
+node_modules-*
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+*.tsbuildinfo
+.env
+.env*.local
+.env.hostinger
+* 2.*
+README 2.md
+next 2.config.mjs
+supabase/config 2.toml
