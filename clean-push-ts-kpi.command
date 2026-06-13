@@ -36,6 +36,7 @@ rsync -a --delete \
   --exclude ".env 2.local" \
   --exclude "*.tsbuildinfo" \
   --exclude "* 2.*" \
+  --exclude "agent-scripts/" \
   --exclude "supabase/.branches/" \
   --exclude "supabase/.temp/" \
   --exclude "clean-push-ts-kpi.command" \

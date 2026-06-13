@@ -17,6 +17,7 @@ fingerprint() {
     -path "$PROJECT/.git" -prune -o \
     -path "$PROJECT/.next" -prune -o \
     -path "$PROJECT/node_modules" -prune -o \
+    -path "$PROJECT/agent-scripts" -prune -o \
     -path "$PROJECT/.next-corrupt-*" -prune -o \
     -name ".env.local" -prune -o \
     -name ".env 2.local" -prune -o \

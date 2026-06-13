@@ -146,7 +146,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     kpisResult,
     targetsResult,
     entriesResult,
-    dailyEntriesResult,
     openingsResult,
     closingsResult,
     portingsResult,
@@ -173,14 +172,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       .eq("shop_id", selectedShop.id)
       .gte("entry_date", startDate)
       .lte("entry_date", endDate)
-      .returns<DailyEntry[]>(),
-    context.supabase
-      .from("daily_kpi_entries")
-      .select("kpi_definition_id, entry_date, value, source, note")
-      .eq("shop_id", selectedShop.id)
-      .eq("entry_date", selectedWeek.startDate)
-      .eq("source", "weekly_manual")
-      .is("source_ref_id", null)
       .returns<DailyEntry[]>(),
     context.supabase
       .from("special_opening_days")
@@ -219,7 +210,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const kpis = kpisResult.data ?? [];
   const targets = targetsResult.data ?? [];
   const entries = entriesResult.data ?? [];
-  const dailyEntries = dailyEntriesResult.data ?? [];
   const openings = openingsResult.data ?? [];
   const closings = closingsResult.data ?? [];
   const portings = portingsResult.data ?? [];
@@ -268,10 +258,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const dailyTotalsByKpi = buildDailyTotalsByKpi(
     entries.filter((entry) => entry.source !== "quarter_adjustment")
   );
-  const dailyEntryMap = dailyEntries.reduce<Map<string, number>>((sum, entry) => {
-    sum.set(entry.kpi_definition_id, entry.value);
-    return sum;
-  }, new Map());
+  const selectedWeekEntryMap = entries
+    .filter(
+      (entry) =>
+        entry.source !== "quarter_adjustment" &&
+        entry.entry_date >= selectedWeek.startDate &&
+        entry.entry_date <= selectedWeek.endDate
+    )
+    .reduce<Map<string, number>>((sum, entry) => {
+      sum.set(entry.kpi_definition_id, (sum.get(entry.kpi_definition_id) ?? 0) + entry.value);
+      return sum;
+    }, new Map());
 
   const cards = kpis.map((kpi) => {
     const metric = calculateKpiMetric({
@@ -319,7 +316,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       : null;
   const dashboardCards = buildDashboardKpiCards({
     cards,
-    dailyEntryMap,
     dailyTotalsByKpi,
     quarterAdjustmentMap,
     quarter,
@@ -363,7 +359,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       />
 
       <DailyInputPanel
-        dailyEntryMap={dailyEntryMap}
+        dailyEntryMap={selectedWeekEntryMap}
         isSaved={searchParams.saved === "weekly" || searchParams.saved === "stand"}
         kpis={kpis}
         quarter={quarter}
@@ -961,6 +957,7 @@ function DailyInputPanel({
         <input name="quarter" type="hidden" value={quarter} />
         <input name="week_key" type="hidden" value={selectedWeek.key} />
         <input name="week_start" type="hidden" value={selectedWeek.startDate} />
+        <input name="week_end" type="hidden" value={selectedWeek.endDate} />
 
         <DailyFieldGroup
           dailyEntryMap={dailyEntryMap}
@@ -1237,7 +1234,6 @@ function resolveWeek(weekKey: string | null | undefined, weeks: IsoWeek[], today
 
 function buildDashboardKpiCards({
   cards,
-  dailyEntryMap,
   dailyTotalsByKpi,
   quarter,
   quarterAdjustmentMap,
@@ -1246,7 +1242,6 @@ function buildDashboardKpiCards({
   year
 }: {
   cards: KpiRow[];
-  dailyEntryMap: Map<string, number>;
   dailyTotalsByKpi: DailyTotalsByKpi;
   quarter: Quarter;
   quarterAdjustmentMap: Map<string, number>;

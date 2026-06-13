@@ -11,15 +11,19 @@ export type IsoWeek = {
 
 export function listQuarterWeeks(year: number, quarter: Quarter): IsoWeek[] {
   const { startDate, endDate } = getQuarterBounds(year, quarter);
+  const quarterStart = parseDateKey(startDate);
   const end = parseDateKey(endDate);
-  let cursor = startOfIsoWeek(parseDateKey(startDate));
+  let cursor = startOfIsoWeek(quarterStart);
   const weeks: IsoWeek[] = [];
 
   while (cursor <= end) {
     const weekYear = getIsoWeekYear(cursor);
     const week = getIsoWeek(cursor);
-    const weekStart = toDateKey(cursor);
-    const weekEnd = toDateKey(addDays(cursor, 6));
+    const rawWeekEnd = addDays(cursor, 6);
+    const clampedStart = cursor < quarterStart ? quarterStart : cursor;
+    const clampedEnd = rawWeekEnd > end ? end : rawWeekEnd;
+    const weekStart = toDateKey(clampedStart);
+    const weekEnd = toDateKey(clampedEnd);
 
     weeks.push({
       endDate: weekEnd,

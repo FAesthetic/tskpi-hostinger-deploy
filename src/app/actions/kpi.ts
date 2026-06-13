@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getQuarterBounds, type Quarter } from "@/lib/kpi/dates";
+import { addDays, getQuarterBounds, parseDateKey, toDateKey, type Quarter } from "@/lib/kpi/dates";
 import { listQuarterWeeks } from "@/lib/kpi/weeks";
 import { recordNotificationEvent } from "@/lib/notifications/events";
 import { createClient } from "@/lib/supabase/server";
@@ -305,6 +305,7 @@ export async function saveWeeklyKpiEntryAction(formData: FormData) {
   const shopId = requiredString(formData, "shop_id");
   const kpiDefinitionId = requiredString(formData, "kpi_definition_id");
   const weekStart = requiredString(formData, "week_start");
+  const weekEnd = optionalString(formData, "week_end") ?? toDateKey(addDays(parseDateKey(weekStart), 6));
   const weekKey = requiredString(formData, "week_key");
   const year = intValue(formData, "year");
   const quarter = intValue(formData, "quarter") as Quarter;
@@ -314,42 +315,24 @@ export async function saveWeeklyKpiEntryAction(formData: FormData) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const { data: existing } = await supabase
-    .from("daily_kpi_entries")
-    .select("id")
-    .eq("shop_id", shopId)
-    .eq("kpi_definition_id", kpiDefinitionId)
-    .eq("entry_date", weekStart)
-    .eq("source", "weekly_manual")
-    .is("source_ref_id", null)
-    .returns<{ id: string }[]>()
-    .maybeSingle();
-
-  const payload = {
-    shop_id: shopId,
-    kpi_definition_id: kpiDefinitionId,
-    entry_date: weekStart,
-    value,
-    note: weekKey,
-    source: "weekly_manual",
-    source_ref_id: null,
-    created_by: user?.id ?? null
-  };
-
-  const { error } = existing
-    ? await supabase.from("daily_kpi_entries").update(payload).eq("id", existing.id)
-    : await supabase.from("daily_kpi_entries").insert(payload);
-
-  if (error) {
-    throw new Error(error.message);
-  }
+  const appliedValue = await setWeeklyKpiTotal({
+    createdBy: user?.id ?? null,
+    desiredTotal: value,
+    kpiDefinitionId,
+    shopId,
+    supabase,
+    weekEnd,
+    weekKey,
+    weekStart
+  });
 
   await recordNotificationEvent(supabase, {
     actorUserId: user?.id,
     eventType: "kpi_weekly_update",
     payload: {
-      entries: [{ kpiDefinitionId, value }],
+      entries: [{ appliedValue, kpiDefinitionId, value }],
       quarter,
+      weekEnd,
       weekKey,
       weekStart,
       year
@@ -369,6 +352,7 @@ export async function saveWeeklyKpiEntryAction(formData: FormData) {
 export async function saveWeeklyKpiEntriesAction(formData: FormData) {
   const shopId = requiredString(formData, "shop_id");
   const weekStart = requiredString(formData, "week_start");
+  const weekEnd = optionalString(formData, "week_end") ?? toDateKey(addDays(parseDateKey(weekStart), 6));
   const weekKey = requiredString(formData, "week_key");
   const year = intValue(formData, "year");
   const quarter = intValue(formData, "quarter") as Quarter;
@@ -385,36 +369,21 @@ export async function saveWeeklyKpiEntriesAction(formData: FormData) {
     }))
     .filter((entry) => entry.kpiDefinitionId.length > 0 && entry.value !== null);
 
+  const appliedValues = [];
+
   for (const entry of values) {
-    const { data: existing } = await supabase
-      .from("daily_kpi_entries")
-      .select("id")
-      .eq("shop_id", shopId)
-      .eq("kpi_definition_id", entry.kpiDefinitionId)
-      .eq("entry_date", weekStart)
-      .eq("source", "weekly_manual")
-      .is("source_ref_id", null)
-      .returns<{ id: string }[]>()
-      .maybeSingle();
+    const appliedValue = await setWeeklyKpiTotal({
+      createdBy: user?.id ?? null,
+      desiredTotal: entry.value ?? 0,
+      kpiDefinitionId: entry.kpiDefinitionId,
+      shopId,
+      supabase,
+      weekEnd,
+      weekKey,
+      weekStart
+    });
 
-    const payload = {
-      shop_id: shopId,
-      kpi_definition_id: entry.kpiDefinitionId,
-      entry_date: weekStart,
-      value: entry.value,
-      note: weekKey,
-      source: "weekly_manual",
-      source_ref_id: null,
-      created_by: user?.id ?? null
-    };
-
-    const { error } = existing
-      ? await supabase.from("daily_kpi_entries").update(payload).eq("id", existing.id)
-      : await supabase.from("daily_kpi_entries").insert(payload);
-
-    if (error) {
-      throw new Error(error.message);
-    }
+    appliedValues.push({ ...entry, appliedValue });
   }
 
   if (values.length) {
@@ -422,8 +391,9 @@ export async function saveWeeklyKpiEntriesAction(formData: FormData) {
       actorUserId: user?.id,
       eventType: "kpi_weekly_update",
       payload: {
-        entries: values,
+        entries: appliedValues,
         quarter,
+        weekEnd,
         weekKey,
         weekStart,
         year
@@ -613,4 +583,82 @@ function numberValueFromRaw(rawValue: FormDataEntryValue, fallback: number | nul
   const value = Number(normalized);
 
   return Number.isFinite(value) ? value : null;
+}
+
+function optionalString(formData: FormData, key: string) {
+  return String(formData.get(key) ?? "").trim() || null;
+}
+
+async function setWeeklyKpiTotal({
+  createdBy,
+  desiredTotal,
+  kpiDefinitionId,
+  shopId,
+  supabase,
+  weekEnd,
+  weekKey,
+  weekStart
+}: {
+  createdBy: string | null;
+  desiredTotal: number;
+  kpiDefinitionId: string;
+  shopId: string;
+  supabase: ReturnType<typeof createClient>;
+  weekEnd: string;
+  weekKey: string;
+  weekStart: string;
+}) {
+  const safeDesiredTotal = Math.max(desiredTotal, 0);
+  const { data: existingEntries, error: existingError } = await supabase
+    .from("daily_kpi_entries")
+    .select("id, value, source, source_ref_id")
+    .eq("shop_id", shopId)
+    .eq("kpi_definition_id", kpiDefinitionId)
+    .gte("entry_date", weekStart)
+    .lte("entry_date", weekEnd)
+    .returns<Array<{ id: string; value: number; source: string; source_ref_id: string | null }>>();
+
+  if (existingError) {
+    throw new Error(existingError.message);
+  }
+
+  const protectedTotal = (existingEntries ?? [])
+    .filter((entry) => entry.source !== "manual" && entry.source !== "weekly_manual" && entry.source !== "quarter_adjustment")
+    .reduce((sum, entry) => sum + entry.value, 0);
+  const userControlledValue = Math.max(safeDesiredTotal - protectedTotal, 0);
+
+  const { error: deleteError } = await supabase
+    .from("daily_kpi_entries")
+    .delete()
+    .eq("shop_id", shopId)
+    .eq("kpi_definition_id", kpiDefinitionId)
+    .gte("entry_date", weekStart)
+    .lte("entry_date", weekEnd)
+    .is("source_ref_id", null)
+    .in("source", ["manual", "weekly_manual"]);
+
+  if (deleteError) {
+    throw new Error(deleteError.message);
+  }
+
+  if (userControlledValue <= 0) {
+    return userControlledValue;
+  }
+
+  const { error: insertError } = await supabase.from("daily_kpi_entries").insert({
+    shop_id: shopId,
+    kpi_definition_id: kpiDefinitionId,
+    entry_date: weekStart,
+    value: userControlledValue,
+    note: weekKey,
+    source: "weekly_manual",
+    source_ref_id: null,
+    created_by: createdBy
+  });
+
+  if (insertError) {
+    throw new Error(insertError.message);
+  }
+
+  return userControlledValue;
 }

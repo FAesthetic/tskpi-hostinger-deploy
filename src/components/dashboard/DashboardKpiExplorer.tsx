@@ -474,6 +474,7 @@ function KpiWeeklyOverview({
             <input name="quarter" type="hidden" value={quarter} />
             <input name="week_key" type="hidden" value={week.key} />
             <input name="week_start" type="hidden" value={week.startDate} />
+            <input name="week_end" type="hidden" value={week.endDate} />
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-semibold text-white">{week.label}</span>
               <span className="text-sm font-semibold text-slate-300">
@@ -494,7 +495,7 @@ function KpiWeeklyOverview({
                 <div className="relative">
                   <input
                     className="h-10 w-full rounded-xl border border-white/[0.09] bg-ink-800 px-3 pr-16 text-right text-sm font-semibold text-white outline-none transition placeholder:text-slate-600 focus:border-pulse-500/60 focus:ring-2 focus:ring-pulse-500/10"
-                    defaultValue={week.manualValue || ""}
+                    defaultValue={week.value || ""}
                     inputMode={kpi.valueType === "money" ? "decimal" : "numeric"}
                     min="0"
                     name="value"
