@@ -10,6 +10,7 @@ import {
   DashboardKpiExplorer,
   type DashboardKpiCardData
 } from "@/components/dashboard/DashboardKpiExplorer";
+import { DivaFloatingChat } from "@/components/analysis/DivaFloatingChat";
 import { KpiGraphPanel, type GraphSeries } from "@/components/dashboard/KpiGraphPanel";
 import { WeekPicker } from "@/components/dashboard/WeekPicker";
 import { AppShell } from "@/components/layout/AppShell";
@@ -393,6 +394,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         quarter={quarter}
         saved={searchParams.saved}
         shopId={selectedShop.id}
+        year={year}
+      />
+      <DivaFloatingChat
+        quarter={quarter}
+        shopId={selectedShop.id}
+        shopName={selectedShop.name}
         year={year}
       />
 

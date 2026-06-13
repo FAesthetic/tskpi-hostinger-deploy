@@ -65,6 +65,16 @@ type Shop = {
   name: string;
 };
 
+type AccessProfile = {
+  global_role: "admin" | "user";
+};
+
+type AccessMembership = {
+  can_view_analysis?: boolean | null;
+  role: string;
+  status: string;
+};
+
 type DivaRequestBody = {
   history?: DivaChatMessage[];
   quarter?: number;
@@ -96,11 +106,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: canViewAnalysis, error: accessError } = await supabase.rpc("can_view_analysis", {
-    target_shop_id: shopId
-  });
+  const hasAccess = await canUseDiva({ shopId, supabase, userId: user.id });
 
-  if (accessError || !canViewAnalysis) {
+  if (!hasAccess) {
     return NextResponse.json(
       { message: "Keine Berechtigung fuer DiVA in diesem Shop.", ok: false },
       { status: 403 }
@@ -119,6 +127,50 @@ export async function POST(request: NextRequest) {
     mode: answer ? "openai" : "rules",
     ok: true
   });
+}
+
+async function canUseDiva({
+  shopId,
+  supabase,
+  userId
+}: {
+  shopId: string;
+  supabase: ReturnType<typeof createClient>;
+  userId: string;
+}) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("global_role")
+    .eq("id", userId)
+    .returns<AccessProfile[]>()
+    .maybeSingle();
+
+  if (profile?.global_role === "admin") {
+    return true;
+  }
+
+  const { data: canViewAnalysis } = await supabase.rpc("can_view_analysis", {
+    target_shop_id: shopId
+  });
+
+  if (canViewAnalysis === true) {
+    return true;
+  }
+
+  const { data: membership } = await supabase
+    .from("shop_memberships")
+    .select("role, status, can_view_analysis")
+    .eq("shop_id", shopId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .returns<AccessMembership[]>()
+    .maybeSingle();
+
+  return Boolean(
+    membership &&
+      membership.status === "active" &&
+      (membership.role === "shop_lead" || membership.can_view_analysis !== false)
+  );
 }
 
 async function buildDivaContext({

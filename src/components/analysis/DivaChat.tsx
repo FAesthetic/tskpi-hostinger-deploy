@@ -18,11 +18,13 @@ const suggestions = [
 ];
 
 export function DivaChat({
+  className = "cockpit-card p-5",
   quarter,
   shopId,
   shopName,
   year
 }: {
+  className?: string;
   quarter: number;
   shopId: string;
   shopName: string;
@@ -102,7 +104,7 @@ export function DivaChat({
   }
 
   return (
-    <section className="cockpit-card p-5">
+    <section className={className}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-pulse-500/25 bg-pulse-500/10 text-pulse-200">
