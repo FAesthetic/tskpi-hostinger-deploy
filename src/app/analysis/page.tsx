@@ -112,10 +112,13 @@ export default async function AnalysisPage({ searchParams }: { searchParams: Sea
 
       <AnalysisWorkbench
         contextQuery={`shop=${selectedShop.id}&year=${year}&quarter=${quarter}`}
+        quarter={quarter}
         selectedWeek={searchParams.week}
         series={series}
+        shopId={selectedShop.id}
         shopName={selectedShop.name}
         weekSummaries={weekSummaries}
+        year={year}
       />
     </AppShell>
   );

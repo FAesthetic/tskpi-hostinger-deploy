@@ -34,6 +34,17 @@ type MorningBriefingInput = {
   };
 };
 
+export type DivaChatMessage = {
+  content: string;
+  role: "assistant" | "user";
+};
+
+type DivaResponseInput = {
+  context: Record<string, unknown>;
+  history?: DivaChatMessage[];
+  question: string;
+};
+
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const DEFAULT_MODEL = "gpt-4.1-mini";
 
@@ -96,6 +107,30 @@ export async function generateMorningBriefing(input: MorningBriefingInput) {
     instructions: MORNING_BRIEFING_SYSTEM_PROMPT,
     maxOutputTokens: 520,
     timeoutMs: 6000
+  });
+}
+
+export async function generateDivaResponse(input: DivaResponseInput) {
+  if (!shouldUseOpenAi()) {
+    return null;
+  }
+
+  const prompt = [
+    "Aktueller Shop-/Quartalskontext als JSON:",
+    JSON.stringify(input.context),
+    "",
+    input.history?.length
+      ? `Bisheriger Chat:\n${input.history.slice(-8).map((message) => `${message.role}: ${message.content}`).join("\n")}`
+      : "Bisheriger Chat: keiner",
+    "",
+    `Frage des Nutzers: ${input.question}`
+  ].join("\n");
+
+  return callOpenAiText({
+    input: prompt,
+    instructions: DIVA_SYSTEM_PROMPT,
+    maxOutputTokens: 900,
+    timeoutMs: 9000
   });
 }
 
@@ -209,4 +244,17 @@ const MORNING_BRIEFING_SYSTEM_PROMPT = [
   "Gib konkrete Massnahmen: Fokus im Tagesbriefing, Verkaufsfrage, Training, Coaching oder Portierungs-/Nachfassaktion.",
   "Erinnere kurz an Datenpflege, wenn aktuelle Wochenwerte oder Staende fehlen koennten.",
   "Ausgabe: Tagesfokus, Lage, Auffaelligkeiten, Massnahmen, Datenpflege. Maximal 8 kurze Bulletpoints."
+].join(" ");
+
+const DIVA_SYSTEM_PROMPT = [
+  "Du bist DiVA, der Digitale Vertriebsassistent fuer eine interne Telekom-Shop KPI-App.",
+  "Du hilfst Shopleitung und Verkaeufern, Quartalsziele aktiv zu steuern.",
+  "Analysiere nur die bereitgestellten Daten. Erfinde keine Umsaetze, Kunden, Aktionen, Events oder Personalgruende.",
+  "Wenn eine Ursache nur eine Hypothese ist, markiere sie klar als Hypothese und nenne, welche Daten sie bestaetigen wuerden.",
+  "Fokusbereiche: MyProv in Euro, DWH in Stueck, Qualitaet, tNPS, Kundenfrequenz, Conversion, Portierungen, Tarifmix, Zielerreichung, Runrate und Kalenderwochen.",
+  "Achte besonders auf Verkaufsqualitaet: TV-zu-DSL-Verhaeltnis, MF- und GK-Mix, Provision je Abschluss, Portierungsbeitrag, DWH gegen Kundenfrequenz und starke Wochenabweichungen.",
+  "Gib konkrete Handlungsempfehlungen fuer Morgenrunde, Coaching, Fokus-KPI, Nachfassaktionen und Datenpflege.",
+  "Sprich direkt, knapp und professionell auf Deutsch. Keine langen Romane.",
+  "Wenn die Daten lueckenhaft sind, sage das offen und schlage die sauberste Pflege vor.",
+  "Keine sensiblen personenbezogenen Daten anfordern oder wiedergeben."
 ].join(" ");

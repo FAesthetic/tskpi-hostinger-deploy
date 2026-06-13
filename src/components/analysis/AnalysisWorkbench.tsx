@@ -1,7 +1,8 @@
 "use client";
 
-import { Bot, Check, LineChart, MessageSquareText, Save, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, LineChart, Save } from "lucide-react";
+import { useState } from "react";
+import { DivaChat } from "@/components/analysis/DivaChat";
 
 export type AnalysisSeries = {
   code: string;
@@ -64,28 +65,28 @@ export function AnalysisWorkbench({
   series,
   selectedWeek,
   contextQuery,
+  quarter,
+  shopId,
   shopName,
-  weekSummaries
+  weekSummaries,
+  year
 }: {
   contextQuery: string;
+  quarter: number;
   series: AnalysisSeries[];
   selectedWeek?: string;
+  shopId: string;
   shopName: string;
   weekSummaries: AnalysisWeekSummary[];
+  year: number;
 }) {
   const defaultIds = series.slice(0, 4).map((item) => item.id);
   const [selectedIds, setSelectedIds] = useState<string[]>(defaultIds);
   const [groupName, setGroupName] = useState("");
   const [savedGroups, setSavedGroups] = useState<SavedGroup[]>(() => readGroups());
-  const [chatQuestion, setChatQuestion] = useState("Was ist in dieser Woche auffaellig und was sollten wir naechste Woche machen?");
-  const [chatAnswer, setChatAnswer] = useState("");
   const selectedSeries = series.filter((item) => selectedIds.includes(item.id));
   const selectedWeekSummary = weekSummaries.find((week) => week.key === selectedWeek) ?? weekSummaries.at(-1);
   const conversion = buildConversionSummary(series, selectedWeekSummary?.key);
-  const aiPrompt = useMemo(
-    () => buildAiPrompt({ selectedSeries, selectedWeekSummary, shopName }),
-    [selectedSeries, selectedWeekSummary, shopName]
-  );
 
   function toggle(id: string) {
     setSelectedIds((current) =>
@@ -108,17 +109,6 @@ export function AnalysisWorkbench({
     setSavedGroups(nextGroups);
     window.localStorage.setItem(storageKey, JSON.stringify(nextGroups));
     setGroupName("");
-  }
-
-  function generateAnalysis() {
-    setChatAnswer(
-      buildRuleBasedAnalysis({
-        question: chatQuestion,
-        selectedSeries,
-        selectedWeekSummary,
-        shopName
-      })
-    );
   }
 
   return (
@@ -274,58 +264,7 @@ export function AnalysisWorkbench({
           <section className="grid gap-6">
             <ConversionInsight conversion={conversion} />
             <SelectedWeekInsight week={selectedWeekSummary} />
-            <section className="cockpit-card p-5">
-            <div className="flex items-center gap-3">
-              <Bot aria-hidden className="h-5 w-5 text-pulse-300" />
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">
-                  KI-Modul
-                </p>
-                <h2 className="text-xl font-semibold text-white">Analyseprompt</h2>
-              </div>
-            </div>
-            <p className="mt-4 text-sm leading-6 text-slate-400">
-              Nutzt aktuell eine lokale Regelanalyse auf deinen ausgewaehlten KPI-Daten. Der
-              Systemprompt ist darunter vorbereitet fuer echte KI-Anbindung.
-            </p>
-            <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
-              <label className="grid gap-2 text-sm font-semibold text-white">
-                Frage an die Analyse
-                <textarea
-                  className="min-h-24 resize-y rounded-xl border border-white/[0.08] bg-white/[0.025] p-3 text-sm leading-6 text-slate-300 outline-none focus:border-pulse-500/50"
-                  onChange={(event) => setChatQuestion(event.target.value)}
-                  value={chatQuestion}
-                />
-              </label>
-              <button
-                className="primary-button mt-3 inline-flex items-center gap-2"
-                onClick={generateAnalysis}
-                type="button"
-              >
-                <MessageSquareText aria-hidden className="h-4 w-4" />
-                Analyse erstellen
-              </button>
-              {chatAnswer ? (
-                <div className="mt-4 whitespace-pre-line rounded-xl border border-white/[0.08] bg-white/[0.035] p-4 text-sm leading-6 text-slate-200">
-                  {chatAnswer}
-                </div>
-              ) : null}
-            </div>
-            <textarea
-              className="mt-4 min-h-72 w-full resize-y rounded-xl border border-white/[0.08] bg-white/[0.025] p-4 text-sm leading-6 text-slate-300 outline-none focus:border-pulse-500/50"
-              readOnly
-              value={aiPrompt}
-            />
-            <div className="mt-4 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4">
-              <div className="flex items-start gap-3">
-                <Sparkles aria-hidden className="mt-0.5 h-5 w-5 text-pulse-300" />
-                <p className="text-sm leading-6 text-slate-300">
-                  Pruefe bei Ausreissern lokale Ereignisse, Aktionen, Frequenzveraenderungen und
-                  Personalsituation. Fuer Husum z. B. Hafentage oder Stadt-Events.
-                </p>
-              </div>
-            </div>
-            </section>
+            <DivaChat quarter={quarter} shopId={shopId} shopName={shopName} year={year} />
           </section>
         </div>
       </section>
@@ -517,34 +456,6 @@ function readGroups() {
   }
 }
 
-function buildAiPrompt({
-  selectedSeries,
-  selectedWeekSummary,
-  shopName
-}: {
-  selectedSeries: AnalysisSeries[];
-  selectedWeekSummary?: AnalysisWeekSummary;
-  shopName: string;
-}) {
-  const data = selectedSeries.map((item) => ({
-    kpi: item.name,
-    kategorie: item.category,
-    wochen: item.points.map((point) => `${point.label}: ${point.value}`).join(", ")
-  }));
-
-  return [
-    "Du bist ein erfahrener Telekom-Shop Performance-Coach.",
-    `Analysiere den Shop ${shopName} anhand der KPI-Wochenwerte.`,
-    "Fokus: Quartalsziel-Erreichung, Runrate, Auffaelligkeiten je Kalenderwoche, Kundenfrequenz, Conversion-Rate DWH Privat/GK und lokale externe Ereignisse.",
-    "Pruefe bei Husum/Rendsburg, ob Stadt-Events, Aktionen, Ferien, Wetter, Personallage oder regionale Veranstaltungen als Hypothese fuer Ausschlaege relevant sein koennten.",
-    selectedWeekSummary
-      ? `Aktive Woche: ${selectedWeekSummary.label}, staerkster KPI: ${selectedWeekSummary.strongestKpi}, Summe: ${selectedWeekSummary.total}.`
-      : "Keine aktive Woche ausgewaehlt.",
-    "Gib aus: 1. Was ist passiert? 2. Warum koennte es passiert sein? 3. Was machen wir naechste Woche konkret?",
-    `Daten: ${JSON.stringify(data)}`
-  ].join("\n");
-}
-
 function buildConversionSummary(series: AnalysisSeries[], weekKey?: string) {
   const valueFor = (codes: string[]) =>
     series
@@ -567,66 +478,6 @@ function buildConversionSummary(series: AnalysisSeries[], weekKey?: string) {
     pkConversion: customerFrequency > 0 ? (pkUnits / customerFrequency) * 100 : null,
     pkUnits
   };
-}
-
-function buildRuleBasedAnalysis({
-  question,
-  selectedSeries,
-  selectedWeekSummary,
-  shopName
-}: {
-  question: string;
-  selectedSeries: AnalysisSeries[];
-  selectedWeekSummary?: AnalysisWeekSummary;
-  shopName: string;
-}) {
-  if (!selectedSeries.length) {
-    return "Bitte markiere mindestens einen KPI, damit ich die Woche sinnvoll bewerten kann.";
-  }
-
-  const week = selectedWeekSummary;
-  const topWeekValues = week
-    ? [...week.values].sort((a, b) => b.value - a.value).slice(0, 3)
-    : [];
-  const weakWeekValues = week
-    ? week.values.filter((item) => item.value === 0).slice(0, 3)
-    : [];
-  const trendSignals = selectedSeries
-    .map((item) => {
-      const last = item.points.at(-1)?.value ?? 0;
-      const previous = item.points.at(-2)?.value ?? 0;
-      return {
-        change: last - previous,
-        name: item.name
-      };
-    })
-    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
-    .slice(0, 3);
-  const conversion = buildConversionSummary(selectedSeries, selectedWeekSummary?.key);
-
-  return [
-    `Analyse fuer ${shopName}`,
-    `Frage: ${question}`,
-    "",
-    week
-      ? `Auffaellig in ${week.label}: ${topWeekValues.map((item) => `${item.kpi} (${formatCompact(item.value)})`).join(", ") || "keine klaren Peaks"}.`
-      : "Keine konkrete Kalenderwoche ausgewaehlt. Ich bewerte den letzten sichtbaren Wochenstand.",
-    weakWeekValues.length
-      ? `Pruefen: ${weakWeekValues.map((item) => item.kpi).join(", ")} hatten keine Bewegung. Das kann echte Ruhe oder fehlende Pflege sein.`
-      : "Keine Null-KPIs in der ausgewaehlten Woche auffaellig.",
-    trendSignals.length
-      ? `Trend-Signale: ${trendSignals.map((item) => `${item.name} ${item.change >= 0 ? "+" : ""}${formatCompact(item.change)}`).join(", ")}.`
-      : "Noch zu wenig Verlauf fuer ein klares Trendsignal.",
-    conversion.customerFrequency > 0
-      ? `Conversion: Privat ${conversion.pkConversion === null ? "-" : `${formatCompact(conversion.pkConversion)}%`} (${formatCompact(conversion.pkUnits)} DWH), GK ${conversion.gkConversion === null ? "-" : `${formatCompact(conversion.gkConversion)}%`} (${formatCompact(conversion.gkUnits)} DWH), Kundenfrequenz ${formatCompact(conversion.customerFrequency)}.`
-      : "Conversion: Noch keine Kundenfrequenz gepflegt. Fuer bessere Ursachenanalyse Kundenfrequenz je Woche eintragen.",
-    "",
-    "Naechste Woche konkret:",
-    "1. Staerksten KPI absichern und Aktivitaet wiederholbar machen.",
-    "2. Null- oder Rueckgangs-KPIs in der Morgenrunde mit konkreter Aktion belegen.",
-    "3. Kundenfrequenz und lokale Ereignisse gegen die Wochenleistung legen.",
-    "4. Bei Husum/Rendsburg externe Peaks wie Hafentage, Stadtaktionen, Ferien oder Wetter als Hypothese notieren."
-  ].join("\n");
 }
 
 function formatCompact(value: number) {
