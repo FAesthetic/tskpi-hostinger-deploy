@@ -207,7 +207,8 @@ function KpiCockpitCard({
 }) {
   const Icon = iconMap[card.iconKey] ?? iconMap.default;
   const restLabel = formatValue(Math.max(card.target - card.actual, 0), card.valueType, card.unit);
-  const forecastPercent = card.runratePercent ?? card.achievementPercent;
+  const currentPercent = card.achievementPercent;
+  const forecastPercent = card.runratePercent;
   const displayName = displayKpiName(card.code, card.name);
   const categoryLabel = displayCategoryLabel(card.category);
   const insight = buildStatusInsight(card);
@@ -232,24 +233,27 @@ function KpiCockpitCard({
 
         <div className="mt-7 flex items-end gap-2">
           <span className="text-5xl font-semibold tracking-tight text-white">
-            {formatPercent(forecastPercent)}
+            {formatPercent(currentPercent)}
           </span>
           <span className="pb-2 text-xl font-bold text-slate-500">%</span>
         </div>
         <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">
-          erwartete Zielerreichung Ende Quartal
+          aktuelle Zielerreichung
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-400">
           <span>Noch {restLabel} offen</span>
           <span className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-2 py-1 text-xs text-slate-300">
             {formatValue(card.differenceToTarget, card.valueType, card.unit)}
           </span>
+          <span className="rounded-lg border border-pulse-500/20 bg-pulse-500/10 px-2 py-1 text-xs text-pulse-200">
+            Runrate {formatPercent(forecastPercent)}%
+          </span>
         </div>
 
         <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[0.06]">
           <div
             className="h-full rounded-full bg-pulse-500"
-            style={{ width: `${Math.min(Math.max(forecastPercent ?? 0, 0), 100)}%` }}
+            style={{ width: `${Math.min(Math.max(currentPercent ?? 0, 0), 100)}%` }}
           />
         </div>
 
@@ -261,9 +265,10 @@ function KpiCockpitCard({
           <MetricLabel label="Ziel" value={formatValue(card.target, card.valueType, card.unit)} />
           <MetricLabel label="Aktuell" value={formatValue(card.actual, card.valueType, card.unit)} />
           <MetricLabel
-            label="Runrate"
+            label="Runrate Wert"
             value={formatValue(card.runrateForecast, card.valueType, card.unit)}
           />
+          <MetricLabel label="Runrate %" value={`${formatPercent(forecastPercent)}%`} />
           <MetricLabel label="pro Arbeitstag" value={formatAverage(card.requiredDaily100, card)} />
         </div>
       </button>
