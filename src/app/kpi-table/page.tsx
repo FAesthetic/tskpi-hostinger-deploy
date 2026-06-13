@@ -225,6 +225,16 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
     sortKey,
     sortDir
   );
+  const visibleRows = rows;
+  const redRows = visibleRows.filter((row) => row.metric.status === "red");
+  const yellowRows = visibleRows.filter((row) => row.metric.status === "yellow");
+  const greenRows = visibleRows.filter((row) => row.metric.status === "green");
+  const riskRow = [...visibleRows]
+    .filter((row) => row.metric.target > 0 && row.metric.runrateForecast !== null)
+    .sort((a, b) => (a.metric.runrateForecast! / a.metric.target) - (b.metric.runrateForecast! / b.metric.target))[0];
+  const bestRow = [...visibleRows]
+    .filter((row) => row.metric.target > 0 && row.metric.runrateForecast !== null)
+    .sort((a, b) => (b.metric.runrateForecast! / b.metric.target) - (a.metric.runrateForecast! / a.metric.target))[0];
 
   return (
     <AppShell
@@ -288,6 +298,39 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
         </form>
       </section>
 
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <TableInsightCard
+          label="Rot"
+          tone="red"
+          value={String(redRows.length)}
+          text={redRows.length ? "brauchen Steuerung" : "kein akuter Brand"}
+        />
+        <TableInsightCard
+          label="Gelb"
+          tone="yellow"
+          value={String(yellowRows.length)}
+          text={yellowRows.length ? "aufholbar, aber beobachten" : "kein Wackler"}
+        />
+        <TableInsightCard
+          label="Gruen"
+          tone="green"
+          value={String(greenRows.length)}
+          text="laut Runrate auf Kurs"
+        />
+        <TableInsightCard
+          label="Groesstes Risiko"
+          tone={riskRow?.metric.status ?? "neutral"}
+          value={riskRow ? displayKpiName(riskRow.kpi.code, riskRow.kpi.name) : "-"}
+          text={riskRow ? `Prognose ${formatForecastPercent(riskRow.metric)}` : "Ziele pflegen"}
+        />
+        <TableInsightCard
+          label="Staerkster KPI"
+          tone={bestRow?.metric.status ?? "neutral"}
+          value={bestRow ? displayKpiName(bestRow.kpi.code, bestRow.kpi.name) : "-"}
+          text={bestRow ? `Prognose ${formatForecastPercent(bestRow.metric)}` : "noch offen"}
+        />
+      </section>
+
       <section className="cockpit-card p-5">
         <div className="overflow-x-auto rounded-lg border border-white/10">
           <table className="w-full min-w-[1120px] border-collapse text-left text-sm">
@@ -344,6 +387,43 @@ export default async function KpiTablePage({ searchParams }: { searchParams: Sea
       </section>
     </AppShell>
   );
+}
+
+function TableInsightCard({
+  label,
+  text,
+  tone,
+  value
+}: {
+  label: string;
+  text: string;
+  tone: StatusTone;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-ink-900/82 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+        <StatusBadge tone={tone}>{statusLabel(tone)}</StatusBadge>
+      </div>
+      <p className="mt-3 truncate text-2xl font-semibold tracking-tight text-white">{value}</p>
+      <p className="mt-1 text-sm leading-6 text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+function formatForecastPercent(metric: KpiMetric) {
+  const value = forecastAchievementPercent(metric);
+
+  return value === null ? "-" : `${formatNumber(value, 1)}%`;
+}
+
+function forecastAchievementPercent(metric: KpiMetric) {
+  if (metric.target <= 0 || metric.runrateForecast === null) {
+    return null;
+  }
+
+  return (metric.runrateForecast / metric.target) * 100;
 }
 
 function SortTh({

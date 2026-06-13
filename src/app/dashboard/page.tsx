@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { BarChart3, ClipboardCheck, Settings, TableProperties } from "lucide-react";
 import {
   saveDailyKpiEntriesAction,
   saveQuarterAdjustmentAction,
@@ -350,6 +351,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         remainingWorkdays={workdays.remainingWorkdays}
       />
 
+      <CockpitWorkflow
+        canManageSelectedShop={canManageSelectedShop}
+        focusCards={focusCards}
+        quarter={quarter}
+        selectedShopId={selectedShop.id}
+        selectedWeek={selectedWeek}
+        year={year}
+      />
+
       <DashboardKpiExplorer
         cards={tnpsDashboardCard ? [...dashboardCards, tnpsDashboardCard] : dashboardCards}
         quarter={quarter}
@@ -598,6 +608,102 @@ function CommandHero({
         </div>
       </div>
     </section>
+  );
+}
+
+function CockpitWorkflow({
+  canManageSelectedShop,
+  focusCards,
+  quarter,
+  selectedShopId,
+  selectedWeek,
+  year
+}: {
+  canManageSelectedShop: boolean;
+  focusCards: KpiRow[];
+  quarter: Quarter;
+  selectedShopId: string;
+  selectedWeek: IsoWeek;
+  year: number;
+}) {
+  const topFocus = focusCards
+    .slice(0, 2)
+    .map((row) => displayKpiName(row.kpi.code, row.kpi.name))
+    .join(", ");
+
+  return (
+    <section className="grid gap-3 xl:grid-cols-4">
+      <WorkflowCard
+        href={`/dashboard?shop=${selectedShopId}&year=${year}&quarter=${quarter}`}
+        icon={<ClipboardCheck aria-hidden className="h-5 w-5" />}
+        label="Dashboard"
+        text={topFocus ? `Heute steuern: ${topFocus}` : "Quartalsstand und Fokus pruefen"}
+        title="Steuern"
+      />
+      <WorkflowCard
+        href={`/analysis?shop=${selectedShopId}&year=${year}&quarter=${quarter}&week=${selectedWeek.key}`}
+        icon={<BarChart3 aria-hidden className="h-5 w-5" />}
+        label={selectedWeek.label}
+        text="Wochen vergleichen, Muster erkennen, Massnahmen ableiten"
+        title="Verstehen"
+      />
+      <WorkflowCard
+        href={`/kpi-table?shop=${selectedShopId}&year=${year}&quarter=${quarter}`}
+        icon={<TableProperties aria-hidden className="h-5 w-5" />}
+        label="KPI-Table"
+        text="Alle Zahlen als Kontrollliste mit Ampel und Bedarf"
+        title="Kontrollieren"
+      />
+      {canManageSelectedShop ? (
+        <WorkflowCard
+          href={`/settings?shop=${selectedShopId}&year=${year}&quarter=${quarter}`}
+          icon={<Settings aria-hidden className="h-5 w-5" />}
+          label="Setup"
+          text="Ziele, Tarife, Nutzerrechte und Shop-Basis pflegen"
+          title="Einrichten"
+        />
+      ) : (
+        <WorkflowCard
+          href={`/entries?shop=${selectedShopId}&year=${year}&quarter=${quarter}`}
+          icon={<ClipboardCheck aria-hidden className="h-5 w-5" />}
+          label="Pflege"
+          text="Werte nachtragen, wenn eine Woche noch offen ist"
+          title="Eintragen"
+        />
+      )}
+    </section>
+  );
+}
+
+function WorkflowCard({
+  href,
+  icon,
+  label,
+  text,
+  title
+}: {
+  href: string;
+  icon: ReactNode;
+  label: string;
+  text: string;
+  title: string;
+}) {
+  return (
+    <Link
+      className="group rounded-2xl border border-white/[0.08] bg-ink-900/82 p-4 transition hover:-translate-y-0.5 hover:border-pulse-500/30 hover:bg-white/[0.045]"
+      href={href}
+    >
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.035] text-pulse-300 transition group-hover:border-pulse-500/30 group-hover:bg-pulse-500/10">
+          {icon}
+        </span>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          <h3 className="mt-1 text-lg font-semibold text-white">{title}</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+        </div>
+      </div>
+    </Link>
   );
 }
 

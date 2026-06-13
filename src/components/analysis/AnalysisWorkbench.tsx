@@ -32,6 +32,33 @@ type SavedGroup = {
 
 const storageKey = "tskpi.analysisGroups";
 const colors = ["#E20074", "#6B7280", "#2563EB", "#16A34A", "#D97706", "#7C3AED", "#DC2626"];
+const analysisPresets = [
+  {
+    codes: ["provision_broadband", "provision_tv", "provision_mobile"],
+    description: "Euro-Ziele und Provisionstempo",
+    name: "MyProv"
+  },
+  {
+    codes: ["units_broadband_pk", "units_tv", "units_speedup", "units_mobile_pk"],
+    description: "Privatkunden-Absatz und TV-Kopplung",
+    name: "DWH Privat"
+  },
+  {
+    codes: ["units_broadband_gk", "units_mobile_gk"],
+    description: "GK-Leistung getrennt betrachten",
+    name: "DWH GK"
+  },
+  {
+    codes: ["quality_customer_frequency", "units_broadband_pk", "units_tv", "units_mobile_pk"],
+    description: "Frequenz gegen Abschlussleistung",
+    name: "Conversion"
+  },
+  {
+    codes: ["provision_broadband", "provision_tv", "units_broadband_pk", "units_tv"],
+    description: "DSL und TV im Bundle verstehen",
+    name: "DSL + TV"
+  }
+];
 
 export function AnalysisWorkbench({
   series,
@@ -107,6 +134,33 @@ export function AnalysisWorkbench({
           </div>
         </div>
 
+        <div className="mt-5 border-t border-white/[0.08] pt-4">
+          <p className="text-sm font-semibold text-white">Schnellansichten</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            Fuer typische Shop-Fragen: Provision, DWH, Conversion oder Bundle-Fokus.
+          </p>
+          <div className="mt-3 grid gap-2">
+            {analysisPresets.map((preset) => {
+              const ids = series
+                .filter((item) => preset.codes.includes(item.code))
+                .map((item) => item.id);
+
+              return (
+                <button
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-left transition hover:border-pulse-500/30 hover:bg-white/[0.045]"
+                  disabled={!ids.length}
+                  key={preset.name}
+                  onClick={() => setSelectedIds(ids)}
+                  type="button"
+                >
+                  <span className="block text-sm font-semibold text-white">{preset.name}</span>
+                  <span className="text-xs leading-5 text-slate-500">{preset.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="mt-5 grid max-h-[520px] gap-2 overflow-y-auto pr-1">
           {series.map((item) => (
             <label
@@ -158,6 +212,24 @@ export function AnalysisWorkbench({
       </aside>
 
       <section className="grid gap-6">
+        <section className="grid gap-3 md:grid-cols-3">
+          <AnalysisGuideCard
+            label="Dashboard"
+            text="Heute entscheiden: kritischster KPI, Tagesbedarf und aktueller Stand."
+            title="Steuerung"
+          />
+          <AnalysisGuideCard
+            label="Analyse"
+            text="Wochen vergleichen: warum lief KW X besser oder schlechter?"
+            title="Ursache"
+          />
+          <AnalysisGuideCard
+            label="KPI-Table"
+            text="Kontrolle: alle Werte, Filter, Sortierung und Ampeln als Tabelle."
+            title="Audit"
+          />
+        </section>
+
         <div className="cockpit-card p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
@@ -257,6 +329,16 @@ export function AnalysisWorkbench({
           </section>
         </div>
       </section>
+    </div>
+  );
+}
+
+function AnalysisGuideCard({ label, text, title }: { label: string; text: string; title: string }) {
+  return (
+    <div className="rounded-2xl border border-white/[0.08] bg-ink-900/82 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">{label}</p>
+      <h3 className="mt-2 text-lg font-semibold text-white">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
     </div>
   );
 }

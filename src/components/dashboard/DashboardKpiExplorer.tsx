@@ -108,6 +108,7 @@ export function DashboardKpiExplorer({
 }) {
   const [selectedKpi, setSelectedKpi] = useState<DashboardKpiCardData | null>(null);
   const groupedCards = useMemo(() => groupCards(cards), [cards]);
+  const categoryOverview = useMemo(() => buildCategoryOverview(cards), [cards]);
 
   return (
     <>
@@ -121,6 +122,28 @@ export function DashboardKpiExplorer({
           {saved === "stand" ? "Aktueller Stand gespeichert." : "Wochen- oder Nachtragswert gespeichert."}
         </div>
       ) : null}
+
+      <section className="rounded-2xl border border-white/[0.08] bg-ink-900/82 p-4">
+        <div className="flex flex-col gap-2 border-b border-white/[0.08] pb-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-pulse-300">
+              KPI-Steuerung
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white">
+              Quartal lesen, Fokus setzen, Woche nachpflegen
+            </h2>
+          </div>
+          <p className="max-w-xl text-sm leading-6 text-slate-400">
+            Dashboard zeigt Entscheidung und Eingabe. Klick auf eine KPI-Karte oeffnet Verlauf,
+            Wochenwerte und Detailprognose.
+          </p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {categoryOverview.map((item) => (
+            <CategorySummaryCard item={item} key={item.category} />
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-8">
         {groupedCards.map(([category, items]) => (
@@ -623,6 +646,75 @@ function groupCards(cards: DashboardKpiCardData[]) {
   return order
     .map((category) => [category, cards.filter((card) => card.category === category)] as const)
     .filter(([, items]) => items.length > 0);
+}
+
+function buildCategoryOverview(cards: DashboardKpiCardData[]) {
+  return groupCards(cards).map(([category, items]) => {
+    const measurable = items.filter((item) => item.target > 0);
+    const red = measurable.filter((item) => item.status === "red").length;
+    const yellow = measurable.filter((item) => item.status === "yellow").length;
+    const green = measurable.filter((item) => item.status === "green").length;
+    const averageForecast = measurable.length
+      ? measurable.reduce((sum, item) => sum + (item.runratePercent ?? item.achievementPercent ?? 0), 0) / measurable.length
+      : null;
+    const critical = [...measurable].sort(
+      (a, b) => (a.runratePercent ?? 999) - (b.runratePercent ?? 999)
+    )[0];
+
+    return {
+      averageForecast,
+      category,
+      critical,
+      green,
+      label: categoryLabels[category],
+      red,
+      total: items.length,
+      yellow
+    };
+  });
+}
+
+function CategorySummaryCard({
+  item
+}: {
+  item: ReturnType<typeof buildCategoryOverview>[number];
+}) {
+  const tone = item.red > 0 ? "red" : item.yellow > 0 ? "yellow" : item.green > 0 ? "green" : "neutral";
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            {item.label}
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {item.averageForecast === null ? "-" : `${formatPercent(item.averageForecast)}%`}
+          </p>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Ø Prognose
+          </p>
+        </div>
+        <StatusBadge tone={tone}>{statusLabel(tone)}</StatusBadge>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs font-semibold">
+        <span className="rounded-lg border border-red-300/15 bg-red-300/[0.055] px-2 py-2 text-red-100">
+          {item.red} rot
+        </span>
+        <span className="rounded-lg border border-amber-200/15 bg-amber-200/[0.055] px-2 py-2 text-amber-100">
+          {item.yellow} gelb
+        </span>
+        <span className="rounded-lg border border-emerald-300/15 bg-emerald-300/[0.055] px-2 py-2 text-emerald-100">
+          {item.green} gruen
+        </span>
+      </div>
+      <p className="mt-3 min-h-10 text-sm leading-5 text-slate-400">
+        {item.critical
+          ? `Engster KPI: ${displayKpiName(item.critical.code, item.critical.name)}`
+          : `${item.total} KPI ohne Zielbewertung`}
+      </p>
+    </div>
+  );
 }
 
 function buildLinePath(
