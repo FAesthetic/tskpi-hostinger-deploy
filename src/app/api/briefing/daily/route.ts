@@ -281,13 +281,13 @@ async function buildBriefingPayload(supabase: BriefingSupabaseClient, shop: Shop
   const aiEmailBody = await generateTeamMailDraft({
     dataCare,
     dslTvRatio,
-    focusRows: [critical, runnerUp, topPerformer].filter(Boolean).map((row) => toAiKpiInput(row)),
+    focusRows: [critical, runnerUp, topPerformer].filter(Boolean).map((row) => toAiKpiInput(row, workdays)),
     mobileRatio,
     qualityRows: rows
       .filter((row) => row.category === "Qualitaet" || row.valueType === "score")
       .sort((a, b) => urgencyScore(a) - urgencyScore(b))
       .slice(0, 3)
-      .map((row) => toAiKpiInput(row)),
+      .map((row) => toAiKpiInput(row, workdays)),
     shopName: shop.name,
     todayLabel,
     workdays
@@ -341,47 +341,6 @@ function buildRatioInsight(
   return `${formatNumber(numerator / denominator, 1)} zu 1 ${numeratorLabel}/${denominatorLabel}`;
 }
 
-function buildAnalysisText({
-  critical,
-  dataCare,
-  dslTvRatio,
-  mobileRatio,
-  runnerUp,
-  shopName,
-  todayLabel,
-  topPerformer,
-  workdays
-}: {
-  critical: BriefingRow | null;
-  dataCare: string;
-  dslTvRatio: string | null;
-  mobileRatio: string | null;
-  runnerUp: BriefingRow | null;
-  shopName: string;
-  todayLabel: string;
-  topPerformer: BriefingRow | null;
-  workdays: { remainingWorkdays: number };
-}) {
-  const lines = [
-    `Guten Morgen ${shopName}. Stand ${todayLabel}.`,
-    critical
-      ? `Fokus heute: ${critical.kpi}. Bei aktueller Geschwindigkeit landen wir bei ${formatNumber(critical.runratePercent, 1)}% Zielerreichung. Bis 100% braucht ihr ab jetzt ${formatKpiValue(critical.metric.requiredDailyAverage, critical.valueType)} pro Arbeitstag.`
-      : "Noch kein kritischer KPI erkennbar. Bitte Ziele und Ist-Werte pruefen.",
-    runnerUp
-      ? `Zweiter Blick: ${runnerUp.kpi} liegt bei ${formatNumber(runnerUp.runratePercent, 1)}% Prognose.`
-      : "Zweiter Blick: noch keine zweite Prioritaet erkennbar.",
-    topPerformer
-      ? `Stabil: ${topPerformer.kpi} wirkt aktuell am staerksten.`
-      : "Stabil: noch kein Top Performer erkennbar.",
-    dslTvRatio ? `Auffaelligkeit: ${dslTvRatio}. Pruefe, ob TV sauber mitverkauft wird.` : null,
-    mobileRatio ? `Mobilfunk-Mix: ${mobileRatio}.` : null,
-    dataCare,
-    `Morgenrunde: 1. Fokus-KPI nennen. 2. Tagesziel festlegen. 3. Konkrete Massnahme fuer Beratung/Training festlegen. Rest-Arbeitstage: ${workdays.remainingWorkdays}.`
-  ];
-
-  return lines.filter(Boolean).join("\n");
-}
-
 function buildTeamMailBody({
   critical,
   dataCare,
@@ -401,17 +360,20 @@ function buildTeamMailBody({
   shopName: string;
   todayLabel: string;
   topPerformer: BriefingRow | null;
-  workdays: { remainingWorkdays: number };
+  workdays: { elapsedWorkdays: number; remainingWorkdays: number; totalWorkdays: number };
 }) {
   const lines = [
     "Guten Morgen zusammen,",
     "",
     `kurzer Fokus fuer ${shopName}, Stand ${todayLabel}:`,
     critical
-      ? `Heute liegt unser Blick zuerst auf ${critical.kpi}. Aktuell zeigt die Prognose ${formatNumber(critical.runratePercent, 1)}% Zielpfad; fuer 100% brauchen wir ab jetzt im Schnitt ${formatKpiValue(critical.metric.requiredDailyAverage, critical.valueType)} pro Arbeitstag.`
+      ? `Heute liegt unser Blick zuerst auf ${critical.kpi}. Stand heute: ${formatKpiValue(critical.actual, critical.valueType)} von ${formatKpiValue(critical.target, critical.valueType)} Ziel; bis heute waeren ${formatKpiValue(expectedByTodayForRow(critical, workdays), critical.valueType)} ein sauberer Zwischenstand.`
       : "Heute gibt es noch keinen eindeutigen kritischen KPI. Bitte Ziele und aktuelle Werte einmal sauber pruefen.",
     runnerUp
-      ? `Zweiter Blick: ${runnerUp.kpi} bei ${formatNumber(runnerUp.runratePercent, 1)}% Prognose.`
+      ? `Zweiter Blick: ${runnerUp.kpi} steht aktuell bei ${formatKpiValue(runnerUp.actual, runnerUp.valueType)} von ${formatKpiValue(runnerUp.target, runnerUp.valueType)} Ziel.`
+      : null,
+    critical
+      ? `Fuer den 100%-Pfad brauchen wir ab jetzt im Schnitt ${formatDailyNeed(critical.metric.requiredDailyAverage, critical.valueType)} pro Arbeitstag. Heute sollten wir diesen Fokus bewusst in jedes passende Gespraech mitnehmen.`
       : null,
     topPerformer
       ? `Stabil wirkt aktuell ${topPerformer.kpi}. Das nehmen wir gern als positives Signal mit.`
@@ -445,17 +407,20 @@ function buildUserPrompt(
         category: row.category,
         kpi: row.kpi,
         requiredPerWorkday100: row.metric.requiredDailyAverage,
-        runratePercent: row.runratePercent,
         target: row.target
       }))
     )}`
   ].join("\n");
 }
 
-function toAiKpiInput(row: BriefingRow) {
+function toAiKpiInput(row: BriefingRow, workdays: { elapsedWorkdays: number; totalWorkdays: number }) {
+  const expectedByToday = expectedByTodayForRow(row, workdays);
+
   return {
     actual: row.actual,
     category: row.category,
+    expectedByToday,
+    gapToExpectedByToday: expectedByToday === null ? null : Math.max(expectedByToday - row.actual, 0),
     kpi: row.kpi,
     requiredPerWorkday100: row.metric.requiredDailyAverage,
     runratePercent: row.runratePercent,
@@ -463,6 +428,39 @@ function toAiKpiInput(row: BriefingRow) {
     target: row.target,
     valueType: row.valueType
   };
+}
+
+function expectedByTodayForRow(
+  row: BriefingRow,
+  workdays: { elapsedWorkdays: number; totalWorkdays: number }
+) {
+  if (row.target <= 0) {
+    return null;
+  }
+
+  if (row.valueType === "score") {
+    return row.target;
+  }
+
+  if (workdays.totalWorkdays <= 0) {
+    return null;
+  }
+
+  return (row.target / workdays.totalWorkdays) * workdays.elapsedWorkdays;
+}
+
+function formatDailyNeed(value: number | null | undefined, valueType: "money" | "count" | "score") {
+  const formatted = formatKpiValue(value, valueType);
+
+  if (valueType === "money") {
+    return `${formatted} Provision`;
+  }
+
+  if (valueType === "count") {
+    return `${formatted} Stueck`;
+  }
+
+  return `${formatted} Qualitaetspunkte`;
 }
 
 function urgencyScore(row: BriefingRow) {
@@ -545,6 +543,7 @@ const MORNING_BRIEFING_SYSTEM_PROMPT = [
   "Team-Mail fuer den Morgenfokus.",
   "Ton: teamnah, motivierend, klar, nicht vorwurfsvoll.",
   "Keine Begriffe wie Mehrumsatz, Umsatz oder Erloes. Geldwerte sind Provisionen; Count-Werte sind Stueckzahlen oder Abschluesse.",
+  "Keine Runrate-, Prognose- oder Zielpfad-Prozentzahlen in der Mail. Verwende Stand heute, Soll-Stand heute und Bedarf pro Tag.",
   "Qualitaet und Fleissthemen wie Datenpflege, Wochenwerte, tNPS, Portierungen ohne Datum und Qualitaets-KPIs beruecksichtigen.",
   "Kurz genug fuer eine echte Morgenmail."
 ].join(" ");

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BarChart3, ClipboardCheck, Mail, RefreshCcw, Settings, TableProperties } from "lucide-react";
+import { BarChart3, CalendarDays, ClipboardCheck, Settings, TableProperties } from "lucide-react";
 import {
   saveDailyKpiEntriesAction,
   saveQuarterAdjustmentAction,
@@ -12,6 +12,7 @@ import {
 } from "@/components/dashboard/DashboardKpiExplorer";
 import { DivaFloatingChat } from "@/components/analysis/DivaFloatingChat";
 import { KpiGraphPanel, type GraphSeries } from "@/components/dashboard/KpiGraphPanel";
+import { TeamMailDraftPanel, type TeamMailDraft } from "@/components/dashboard/TeamMailDraftPanel";
 import { WeekPicker } from "@/components/dashboard/WeekPicker";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopCreatePanel } from "@/components/shops/ShopCreatePanel";
@@ -108,10 +109,11 @@ type KpiRow = {
 
 type DailyTotalsByKpi = Map<string, Map<string, number>>;
 
-type TeamMailDraft = {
-  body: string;
-  mode: "openai" | "rules";
-  subject: string;
+type WeekShortcutItem = {
+  active: boolean;
+  href: string;
+  label: string;
+  week: IsoWeek;
 };
 
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
@@ -384,7 +386,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     workdays
   });
   const shouldGenerateAiFocus = searchParams.aiFocus === "regen" || !searchParams.saved;
-  const shouldGenerateTeamMail = searchParams.mail === "regen" || !searchParams.saved;
+  const shouldGenerateTeamMail = searchParams.mail === "regen";
   const [aiTodayImportant, aiTeamMailText] = await Promise.all([
     shouldGenerateAiFocus
       ? generateTodayImportantInsight({
@@ -400,10 +402,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       ? generateTeamMailDraft({
           dataCare,
           dslTvRatio,
-          focusRows: mailFocusRows.map((row) => toAiKpiInput(row)),
+          focusRows: mailFocusRows.map((row) => toAiMailKpiInput(row, workdays)),
           mobileRatio,
           qualityRows: [
-            ...qualityRows.map((row) => toAiKpiInput(row)),
+            ...qualityRows.map((row) => toAiMailKpiInput(row, workdays)),
             ...(tnpsMailRow ? [tnpsMailRow] : [])
           ],
           shopName: selectedShop.name,
@@ -419,7 +421,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     weekKey: selectedWeek.key,
     year
   });
-  const teamMailMailtoHref = buildMailtoHref(teamMailDraft);
+  const weekShortcuts = buildWeekShortcutItems({
+    quarter,
+    quarterWeeks,
+    selectedShopId: selectedShop.id,
+    selectedWeekKey: selectedWeek.key,
+    today,
+    year
+  });
 
   return (
     <AppShell
@@ -436,11 +445,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         critical={critical}
         focusCards={focusCards}
         teamMailDraft={teamMailDraft}
-        teamMailMailtoHref={teamMailMailtoHref}
         teamMailRegenerateHref={teamMailRegenerateHref}
         overallTone={overallTone}
         portingsWithoutDate={portingsWithoutDate}
         remainingWorkdays={workdays.remainingWorkdays}
+        weekShortcuts={weekShortcuts}
       />
 
       <CockpitWorkflow
@@ -614,8 +623,8 @@ function CommandHero({
   portingsWithoutDate,
   remainingWorkdays,
   teamMailDraft,
-  teamMailMailtoHref,
-  teamMailRegenerateHref
+  teamMailRegenerateHref,
+  weekShortcuts
 }: {
   aiTodayImportant: string | null;
   critical: KpiRow | null;
@@ -624,8 +633,8 @@ function CommandHero({
   portingsWithoutDate: number;
   remainingWorkdays: number;
   teamMailDraft: TeamMailDraft;
-  teamMailMailtoHref: string;
   teamMailRegenerateHref: string;
+  weekShortcuts: WeekShortcutItem[];
 }) {
   const runnerUp = focusCards[1] ?? null;
   const headline = overallTone === "green"
@@ -678,7 +687,6 @@ function CommandHero({
           </p>
 
           <TeamMailDraftPanel
-            mailtoHref={teamMailMailtoHref}
             regenerateHref={teamMailRegenerateHref}
             teamMailDraft={teamMailDraft}
           />
@@ -722,49 +730,33 @@ function CommandHero({
               {runnerUp ? displayKpiName(runnerUp.kpi.code, runnerUp.kpi.name) : portingsWithoutDate > 0 ? "Portierungen ohne Datum klaeren" : "stabile KPIs absichern"}
             </li>
           </ul>
+
+          <div className="mt-6 rounded-xl border border-white/[0.08] bg-black/20 p-4">
+            <div className="flex items-center gap-2">
+              <CalendarDays aria-hidden className="h-4 w-4 text-pulse-300" />
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">
+                Zahlen pflegen
+              </p>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {weekShortcuts.map((item) => (
+                <Link
+                  className={weekShortcutClass(item.active)}
+                  href={item.href}
+                  key={item.week.key}
+                  scroll
+                >
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {item.label}
+                  </span>
+                  <span className="mt-1 text-sm font-semibold">KW {item.week.week}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function TeamMailDraftPanel({
-  mailtoHref,
-  regenerateHref,
-  teamMailDraft
-}: {
-  mailtoHref: string;
-  regenerateHref: string;
-  teamMailDraft: TeamMailDraft;
-}) {
-  return (
-    <div className="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.035] p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">
-            Team-Mail
-          </p>
-          <h2 className="mt-2 text-lg font-semibold text-white">{teamMailDraft.subject}</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {teamMailDraft.mode === "openai" ? "AI-Entwurf aus aktuellen Zahlen" : "Regelentwurf aus aktuellen Zahlen"}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <a className="secondary-button inline-flex h-10 items-center justify-center gap-2 px-3" href={mailtoHref}>
-            <Mail aria-hidden className="h-4 w-4" />
-            Mail oeffnen
-          </a>
-          <Link className="secondary-button inline-flex h-10 items-center justify-center gap-2 px-3" href={regenerateHref} scroll={false}>
-            <RefreshCcw aria-hidden className="h-4 w-4" />
-            Neu generieren
-          </Link>
-        </div>
-      </div>
-
-      <div className="mt-4 whitespace-pre-wrap rounded-lg border border-white/[0.08] bg-black/20 p-4 text-sm leading-6 text-slate-300">
-        {teamMailDraft.body}
-      </div>
-    </div>
   );
 }
 
@@ -1184,12 +1176,12 @@ function DailyInputPanel({
   const currentWeekIndex = quarterWeeks.findIndex((week) => week.key === currentWeek.key);
   const previousWeek = currentWeekIndex > 0 ? quarterWeeks[currentWeekIndex - 1] : null;
   const quickWeeks = [
-    previousWeek ? { label: "Vergangene KW", week: previousWeek } : null,
-    { label: "Aktuelle KW", week: currentWeek }
+    previousWeek ? { label: "Vorwoche", week: previousWeek } : null,
+    { label: "Aktuelle Woche", week: currentWeek }
   ].filter(Boolean) as Array<{ label: string; week: IsoWeek }>;
 
   return (
-    <section className="cockpit-card p-5 md:p-6">
+    <section className="cockpit-card p-5 md:p-6" id="wochenpflege">
       <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-pulse-300">
@@ -1218,7 +1210,7 @@ function DailyInputPanel({
           {quickWeeks.map(({ label, week }) => (
             <Link
               className={weekShortcutClass(selectedWeek.key === week.key)}
-              href={`${baseHref}&week=${week.key}`}
+              href={`${baseHref}&week=${week.key}#wochenpflege`}
               key={week.key}
               scroll={false}
             >
@@ -1530,6 +1522,8 @@ function buildTnpsMailRow(currentTnps: TnpsEntry | null, target: number) {
   return {
     actual,
     category: "Qualitaet",
+    expectedByToday: target > 0 ? target : null,
+    gapToExpectedByToday: target > 0 ? Math.max(target - actual, 0) : null,
     kpi: "tNPS",
     requiredPerWorkday100: null,
     runratePercent,
@@ -1574,10 +1568,13 @@ function buildFallbackTeamMailDraft({
     "",
     `kurzer Fokus fuer ${shopName}, Stand ${todayLabel}:`,
     critical
-      ? `Heute liegt unser Blick zuerst auf ${displayKpiName(critical.kpi.code, critical.kpi.name)}. Die Prognose steht bei ${formatNumber(forecastAchievementPercent(critical.metric), 1)}%; fuer den 100%-Pfad brauchen wir ab jetzt im Schnitt ${formatDailyNeed(critical.metric.requiredDailyAverage, critical.kpi.value_type)} pro Arbeitstag.`
+      ? `Heute liegt unser Blick zuerst auf ${displayKpiName(critical.kpi.code, critical.kpi.name)}. Stand heute: ${formatKpiValue(critical.metric.actual, critical.kpi.value_type)} von ${formatKpiValue(critical.metric.target, critical.kpi.value_type)} Ziel; bis heute waeren ${formatKpiValue(expectedByTodayForMetric(critical.metric, critical.kpi.value_type, workdays), critical.kpi.value_type)} ein sauberer Zwischenstand.`
       : "Heute ist noch kein eindeutiger kritischer KPI erkennbar. Bitte Ziele und aktuelle Werte einmal sauber pruefen.",
     runnerUp
-      ? `Zweiter Blick: ${displayKpiName(runnerUp.kpi.code, runnerUp.kpi.name)} liegt bei ${formatNumber(forecastAchievementPercent(runnerUp.metric), 1)}% Prognose.`
+      ? `Zweiter Blick: ${displayKpiName(runnerUp.kpi.code, runnerUp.kpi.name)} steht aktuell bei ${formatKpiValue(runnerUp.metric.actual, runnerUp.kpi.value_type)} von ${formatKpiValue(runnerUp.metric.target, runnerUp.kpi.value_type)} Ziel.`
+      : null,
+    critical
+      ? `Fuer den 100%-Pfad brauchen wir ab jetzt im Schnitt ${formatDailyNeed(critical.metric.requiredDailyAverage, critical.kpi.value_type)} pro Arbeitstag. Heute sollten wir diesen Fokus bewusst in jedes passende Gespraech mitnehmen.`
       : null,
     topPerformer
       ? `Positiv mitnehmen: ${displayKpiName(topPerformer.kpi.code, topPerformer.kpi.name)} wirkt aktuell am stabilsten.`
@@ -1593,7 +1590,7 @@ function buildFallbackTeamMailDraft({
     mode: "rules",
     subject
   };
-}
+}  
 
 function parseTeamMailDraft(text: string | null, fallbackSubject: string): TeamMailDraft | null {
   if (!text?.trim()) {
@@ -1643,13 +1640,37 @@ function buildTeamMailRegenerateHref({
   return `/dashboard?${params.toString()}`;
 }
 
-function buildMailtoHref(draft: TeamMailDraft) {
-  const params = new URLSearchParams({
-    body: draft.body,
-    subject: draft.subject
-  });
+function buildWeekShortcutItems({
+  quarter,
+  quarterWeeks,
+  selectedShopId,
+  selectedWeekKey,
+  today,
+  year
+}: {
+  quarter: Quarter;
+  quarterWeeks: IsoWeek[];
+  selectedShopId: string;
+  selectedWeekKey: string;
+  today: string;
+  year: number;
+}): WeekShortcutItem[] {
+  const baseHref = `/dashboard?shop=${selectedShopId}&year=${year}&quarter=${quarter}`;
+  const currentWeek = resolveWeek(null, quarterWeeks, today);
+  const currentWeekIndex = quarterWeeks.findIndex((week) => week.key === currentWeek.key);
+  const previousWeek = currentWeekIndex > 0 ? quarterWeeks[currentWeekIndex - 1] : null;
 
-  return `mailto:?${params.toString()}`;
+  return [
+    previousWeek ? { label: "Vorwoche", week: previousWeek } : null,
+    { label: "Aktuelle Woche", week: currentWeek }
+  ]
+    .flatMap((item) => (item ? [item] : []))
+    .map(({ label, week }) => ({
+      active: week.key === selectedWeekKey,
+      href: `${baseHref}&week=${week.key}#wochenpflege`,
+      label,
+      week
+    }));
 }
 
 function buildDailyFocusHint(
@@ -1737,6 +1758,37 @@ function toAiKpiInput(row: KpiRow) {
     target: row.metric.target,
     valueType: row.kpi.value_type
   };
+}
+
+function toAiMailKpiInput(row: KpiRow, workdays: WorkdaySummary) {
+  const expectedByToday = expectedByTodayForMetric(row.metric, row.kpi.value_type, workdays);
+
+  return {
+    ...toAiKpiInput(row),
+    expectedByToday,
+    gapToExpectedByToday:
+      expectedByToday === null ? null : Math.max(expectedByToday - row.metric.actual, 0)
+  };
+}
+
+function expectedByTodayForMetric(
+  metric: KpiMetric,
+  valueType: "money" | "count" | "score",
+  workdays: WorkdaySummary
+) {
+  if (metric.target <= 0) {
+    return null;
+  }
+
+  if (valueType === "score") {
+    return metric.target;
+  }
+
+  if (workdays.totalWorkdays <= 0) {
+    return null;
+  }
+
+  return (metric.target / workdays.totalWorkdays) * workdays.elapsedWorkdays;
 }
 
 function resolveWeek(weekKey: string | null | undefined, weeks: IsoWeek[], today: string): IsoWeek {

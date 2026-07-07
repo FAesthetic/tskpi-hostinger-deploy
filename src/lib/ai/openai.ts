@@ -3,6 +3,8 @@ import { formatKpiValue, formatNumber } from "@/lib/kpi/format";
 export type AiKpiInput = {
   actual: number;
   category: string;
+  expectedByToday?: number | null;
+  gapToExpectedByToday?: number | null;
   kpi: string;
   requiredPerWorkday100: number | null;
   runratePercent: number | null;
@@ -151,8 +153,8 @@ export async function generateTeamMailDraft(input: TeamMailDraftInput) {
   return callOpenAiText({
     input: prompt,
     instructions: TEAM_MAIL_SYSTEM_PROMPT,
-    maxOutputTokens: 420,
-    timeoutMs: 7000
+    maxOutputTokens: 340,
+    timeoutMs: 5000
   });
 }
 
@@ -278,10 +280,11 @@ function formatKpiForPrompt(row: AiKpiInput) {
 function formatMailKpiForPrompt(row: AiKpiInput) {
   return {
     bedarfProArbeitstagBis100: formatKpiValue(row.requiredPerWorkday100, row.valueType),
+    fehltBisStandHeute: formatKpiValue(row.gapToExpectedByToday, row.valueType),
     ist: formatKpiValue(row.actual, row.valueType),
     kategorie: row.category,
     kpi: row.kpi,
-    runrateProzent: row.runratePercent === null ? null : `${formatNumber(row.runratePercent, 1)}%`,
+    sollStandHeute: formatKpiValue(row.expectedByToday, row.valueType),
     status: row.status,
     wertart: valueTypeLabel(row.valueType),
     ziel: formatKpiValue(row.target, row.valueType)
@@ -325,8 +328,9 @@ const TEAM_MAIL_SYSTEM_PROMPT = [
   "Formatiere exakt so: erste Zeile 'Betreff: ...', dann eine Leerzeile, dann der Mailtext.",
   "Beginne den Mailtext mit 'Guten Morgen zusammen,'.",
   "Schreibe 5 bis 8 kurze Zeilen oder kurze Absaetze. Kein langer Bericht.",
-  "Nenne den wichtigsten Fokus, ein klares Tagesziel oder Tagesverhalten und einen zweiten Blick.",
+  "Nenne den wichtigsten Fokus, den Stand heute, was Stand heute erreicht sein sollte, was heute angegangen werden sollte und was pro Tag bis zum Ziel gebraucht wird.",
   "Packe Qualitaets- und Fleissthemen hinein: Datenpflege, aktuelle Wochenwerte, Portierungen ohne Datum, tNPS oder Qualitaets-KPIs, wenn sie in den Daten stehen.",
+  "Schreibe in der Mail keine Runrate-, Prognose- oder Zielpfad-Prozentzahlen. Nutze stattdessen Ist-Stand, Soll-Stand heute, Luecke und Bedarf pro Tag.",
   "Wichtig: Verwende nie die Begriffe Mehrumsatz, Umsatz oder Erloes. Geldwerte sind Provisionen in EUR. Count-Werte sind Stueckzahlen oder Abschluesse. Score-Werte sind Qualitaet.",
   "Nutze nur die bereitgestellten Daten. Erfinde keine Aktionen, Personen, Kundentermine oder Ursachen.",
   "Ende mit einem kurzen gemeinsamen Abschluss, nicht mit einer Floskel aus dem Konzernsprech."
