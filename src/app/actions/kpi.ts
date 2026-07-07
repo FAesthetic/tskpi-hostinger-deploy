@@ -315,16 +315,16 @@ export async function saveWeeklyKpiEntryAction(formData: FormData) {
     data: { user }
   } = await supabase.auth.getUser();
 
-  const appliedValue = await setWeeklyKpiTotal({
+  const [appliedEntry] = await setWeeklyKpiTotals({
     createdBy: user?.id ?? null,
-    desiredTotal: value,
-    kpiDefinitionId,
+    entries: [{ desiredTotal: value, kpiDefinitionId }],
     shopId,
     supabase,
     weekEnd,
     weekKey,
     weekStart
   });
+  const appliedValue = appliedEntry?.appliedValue ?? 0;
 
   await recordNotificationEvent(supabase, {
     actorUserId: user?.id,
@@ -369,22 +369,18 @@ export async function saveWeeklyKpiEntriesAction(formData: FormData) {
     }))
     .filter((entry) => entry.kpiDefinitionId.length > 0 && entry.value !== null);
 
-  const appliedValues = [];
-
-  for (const entry of values) {
-    const appliedValue = await setWeeklyKpiTotal({
-      createdBy: user?.id ?? null,
+  const appliedValues = await setWeeklyKpiTotals({
+    createdBy: user?.id ?? null,
+    entries: values.map((entry) => ({
       desiredTotal: entry.value ?? 0,
-      kpiDefinitionId: entry.kpiDefinitionId,
-      shopId,
-      supabase,
-      weekEnd,
-      weekKey,
-      weekStart
-    });
-
-    appliedValues.push({ ...entry, appliedValue });
-  }
+      kpiDefinitionId: entry.kpiDefinitionId
+    })),
+    shopId,
+    supabase,
+    weekEnd,
+    weekKey,
+    weekStart
+  });
 
   if (values.length) {
     await recordNotificationEvent(supabase, {
@@ -589,10 +585,14 @@ function optionalString(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim() || null;
 }
 
-async function setWeeklyKpiTotal({
+type WeeklyKpiTotalInput = {
+  desiredTotal: number;
+  kpiDefinitionId: string;
+};
+
+async function setWeeklyKpiTotals({
   createdBy,
-  desiredTotal,
-  kpiDefinitionId,
+  entries,
   shopId,
   supabase,
   weekEnd,
@@ -600,38 +600,76 @@ async function setWeeklyKpiTotal({
   weekStart
 }: {
   createdBy: string | null;
-  desiredTotal: number;
-  kpiDefinitionId: string;
+  entries: WeeklyKpiTotalInput[];
   shopId: string;
   supabase: ReturnType<typeof createClient>;
   weekEnd: string;
   weekKey: string;
   weekStart: string;
 }) {
-  const safeDesiredTotal = Math.max(desiredTotal, 0);
+  const uniqueEntries = Array.from(
+    new Map(
+      entries
+        .filter((entry) => entry.kpiDefinitionId.length > 0)
+        .map((entry) => [entry.kpiDefinitionId, entry])
+    ).values()
+  );
+  const kpiDefinitionIds = uniqueEntries.map((entry) => entry.kpiDefinitionId);
+
+  if (!kpiDefinitionIds.length) {
+    return [];
+  }
+
   const { data: existingEntries, error: existingError } = await supabase
     .from("daily_kpi_entries")
-    .select("id, value, source, source_ref_id")
+    .select("id, kpi_definition_id, value, source, source_ref_id")
     .eq("shop_id", shopId)
-    .eq("kpi_definition_id", kpiDefinitionId)
+    .in("kpi_definition_id", kpiDefinitionIds)
     .gte("entry_date", weekStart)
     .lte("entry_date", weekEnd)
-    .returns<Array<{ id: string; value: number; source: string; source_ref_id: string | null }>>();
+    .returns<
+      Array<{
+        id: string;
+        kpi_definition_id: string;
+        value: number;
+        source: string;
+        source_ref_id: string | null;
+      }>
+    >();
 
   if (existingError) {
     throw new Error(existingError.message);
   }
 
-  const protectedTotal = (existingEntries ?? [])
-    .filter((entry) => entry.source !== "manual" && entry.source !== "weekly_manual" && entry.source !== "quarter_adjustment")
-    .reduce((sum, entry) => sum + entry.value, 0);
-  const userControlledValue = Math.max(safeDesiredTotal - protectedTotal, 0);
+  const protectedTotals = (existingEntries ?? []).reduce<Map<string, number>>((sum, entry) => {
+    if (
+      entry.source === "manual" ||
+      entry.source === "weekly_manual" ||
+      entry.source === "quarter_adjustment"
+    ) {
+      return sum;
+    }
+
+    sum.set(entry.kpi_definition_id, (sum.get(entry.kpi_definition_id) ?? 0) + entry.value);
+    return sum;
+  }, new Map());
+  const appliedValues = uniqueEntries.map((entry) => {
+    const safeDesiredTotal = Math.max(entry.desiredTotal, 0);
+    const protectedTotal = protectedTotals.get(entry.kpiDefinitionId) ?? 0;
+
+    return {
+      appliedValue: Math.max(safeDesiredTotal - protectedTotal, 0),
+      desiredTotal: safeDesiredTotal,
+      kpiDefinitionId: entry.kpiDefinitionId,
+      value: safeDesiredTotal
+    };
+  });
 
   const { error: deleteError } = await supabase
     .from("daily_kpi_entries")
     .delete()
     .eq("shop_id", shopId)
-    .eq("kpi_definition_id", kpiDefinitionId)
+    .in("kpi_definition_id", kpiDefinitionIds)
     .gte("entry_date", weekStart)
     .lte("entry_date", weekEnd)
     .is("source_ref_id", null)
@@ -641,24 +679,28 @@ async function setWeeklyKpiTotal({
     throw new Error(deleteError.message);
   }
 
-  if (userControlledValue <= 0) {
-    return userControlledValue;
+  const rowsToInsert = appliedValues
+    .filter((entry) => entry.appliedValue > 0)
+    .map((entry) => ({
+      shop_id: shopId,
+      kpi_definition_id: entry.kpiDefinitionId,
+      entry_date: weekStart,
+      value: entry.appliedValue,
+      note: weekKey,
+      source: "weekly_manual",
+      source_ref_id: null,
+      created_by: createdBy
+    }));
+
+  if (!rowsToInsert.length) {
+    return appliedValues;
   }
 
-  const { error: insertError } = await supabase.from("daily_kpi_entries").insert({
-    shop_id: shopId,
-    kpi_definition_id: kpiDefinitionId,
-    entry_date: weekStart,
-    value: userControlledValue,
-    note: weekKey,
-    source: "weekly_manual",
-    source_ref_id: null,
-    created_by: createdBy
-  });
+  const { error: insertError } = await supabase.from("daily_kpi_entries").insert(rowsToInsert);
 
   if (insertError) {
     throw new Error(insertError.message);
   }
 
-  return userControlledValue;
+  return appliedValues;
 }

@@ -21,7 +21,7 @@ export function WeekPicker({
         onChange={(event) => {
           const params = new URLSearchParams(searchParams.toString());
           params.set("week", event.target.value);
-          router.push(`?${params.toString()}`);
+          router.replace(`?${params.toString()}`, { scroll: false });
         }}
         value={selectedWeekKey}
       >

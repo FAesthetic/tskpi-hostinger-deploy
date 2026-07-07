@@ -352,14 +352,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     workdays,
     year
   });
-  const aiTodayImportant = await generateTodayImportantInsight({
-    critical: critical ? toAiKpiInput(critical) : null,
-    portingsWithoutDate,
-    remainingWorkdays: workdays.remainingWorkdays,
-    runnerUp: focusCards[1] ? toAiKpiInput(focusCards[1]) : null,
-    shopName: selectedShop.name,
-    topPerformer: stableCards[0] ? toAiKpiInput(stableCards[0]) : null
-  });
+  const aiTodayImportant = searchParams.saved
+    ? null
+    : await generateTodayImportantInsight({
+        critical: critical ? toAiKpiInput(critical) : null,
+        portingsWithoutDate,
+        remainingWorkdays: workdays.remainingWorkdays,
+        runnerUp: focusCards[1] ? toAiKpiInput(focusCards[1]) : null,
+        shopName: selectedShop.name,
+        topPerformer: stableCards[0] ? toAiKpiInput(stableCards[0]) : null
+      });
 
   return (
     <AppShell
@@ -1065,6 +1067,13 @@ function DailyInputPanel({
 }) {
   const grouped = getDailyInputGroups(kpis);
   const baseHref = `/dashboard?shop=${selectedShopId}&year=${year}&quarter=${quarter}`;
+  const currentWeek = resolveWeek(null, quarterWeeks, today);
+  const currentWeekIndex = quarterWeeks.findIndex((week) => week.key === currentWeek.key);
+  const previousWeek = currentWeekIndex > 0 ? quarterWeeks[currentWeekIndex - 1] : null;
+  const quickWeeks = [
+    previousWeek ? { label: "Vergangene KW", week: previousWeek } : null,
+    { label: "Aktuelle KW", week: currentWeek }
+  ].filter(Boolean) as Array<{ label: string; week: IsoWeek }>;
 
   return (
     <section className="cockpit-card p-5 md:p-6">
@@ -1087,16 +1096,26 @@ function DailyInputPanel({
               {savedMode === "stand" ? "Aktueller Stand gespeichert" : "Wochenwerte gespeichert"}
             </span>
           ) : null}
-          {selectedWeek.startDate !== resolveWeek(null, quarterWeeks, today).startDate ? (
-            <Link className="secondary-button py-2" href={baseHref}>
-              Aktuelle KW
-            </Link>
-          ) : null}
         </div>
       </div>
 
-      <div className="mt-5 max-w-sm rounded-xl border border-white/[0.08] bg-white/[0.025] p-4">
+      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(240px,360px)_1fr] lg:items-end">
         <WeekPicker selectedWeekKey={selectedWeek.key} weeks={quarterWeeks} />
+        <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:justify-end">
+          {quickWeeks.map(({ label, week }) => (
+            <Link
+              className={weekShortcutClass(selectedWeek.key === week.key)}
+              href={`${baseHref}&week=${week.key}`}
+              key={week.key}
+              scroll={false}
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                {label}
+              </span>
+              <span className="mt-1 text-sm font-semibold">KW {week.week}</span>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <form action={saveWeeklyKpiEntriesAction} className="mt-5 grid gap-5">
@@ -1106,6 +1125,13 @@ function DailyInputPanel({
         <input name="week_key" type="hidden" value={selectedWeek.key} />
         <input name="week_start" type="hidden" value={selectedWeek.startDate} />
         <input name="week_end" type="hidden" value={selectedWeek.endDate} />
+
+        <div className="flex flex-col gap-3 border-b border-white/[0.08] pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm font-semibold text-slate-300">{selectedWeek.label}</p>
+          <SubmitButton className="primary-button h-10 px-5" pendingLabel="Speichert KW...">
+            KW speichern
+          </SubmitButton>
+        </div>
 
         <DailyFieldGroup
           dailyEntryMap={dailyEntryMap}
@@ -1144,6 +1170,15 @@ function DailyInputPanel({
       </div>
     </section>
   );
+}
+
+function weekShortcutClass(active: boolean) {
+  return [
+    "inline-flex min-h-11 flex-col justify-center rounded-lg border px-3 py-2 text-left transition",
+    active
+      ? "border-pulse-500/50 bg-pulse-500/10 text-white"
+      : "border-white/[0.09] bg-white/[0.035] text-slate-300 hover:border-pulse-500/35 hover:bg-pulse-500/10 hover:text-white"
+  ].join(" ");
 }
 
 function DailyFieldGroup({
