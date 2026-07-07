@@ -1,6 +1,6 @@
 import { formatKpiValue, formatNumber } from "@/lib/kpi/format";
 
-type AiKpiInput = {
+export type AiKpiInput = {
   actual: number;
   category: string;
   kpi: string;
@@ -25,6 +25,21 @@ type MorningBriefingInput = {
   dslTvRatio: string | null;
   mobileRatio: string | null;
   rows: AiKpiInput[];
+  shopName: string;
+  todayLabel: string;
+  workdays: {
+    elapsedWorkdays: number;
+    remainingWorkdays: number;
+    totalWorkdays: number;
+  };
+};
+
+type TeamMailDraftInput = {
+  dataCare: string;
+  dslTvRatio: string | null;
+  focusRows: AiKpiInput[];
+  mobileRatio: string | null;
+  qualityRows: AiKpiInput[];
   shopName: string;
   todayLabel: string;
   workdays: {
@@ -62,7 +77,8 @@ export async function generateTodayImportantInsight(input: TodayImportantInput) 
     `Top Performer: ${input.topPerformer ? formatKpiForPrompt(input.topPerformer) : "keiner"}`,
     "",
     "Schreibe genau einen kurzen Management-Hinweis fuer den Dashboard-Bereich 'Heute wichtig'.",
-    "Maximal 3 Saetze. Konkrete Handlung, kein BlaBla. Deutsch. Telekom-Shop-Kontext."
+    "Maximal 3 Saetze. Konkrete Handlung, kein BlaBla. Deutsch. Telekom-Shop-Kontext.",
+    "Wichtig: Verwende nie 'Mehrumsatz', 'Umsatz' oder 'Erloes'. Geldwerte sind Provisionen, Count-Werte sind Stueckzahlen oder Abschluesse, Score-Werte sind Qualitaet."
   ].join("\n");
 
   return callOpenAiText({
@@ -107,6 +123,36 @@ export async function generateMorningBriefing(input: MorningBriefingInput) {
     instructions: MORNING_BRIEFING_SYSTEM_PROMPT,
     maxOutputTokens: 320,
     timeoutMs: 6000
+  });
+}
+
+export async function generateTeamMailDraft(input: TeamMailDraftInput) {
+  if (!shouldUseOpenAi()) {
+    return null;
+  }
+
+  const prompt = [
+    `Shop: ${input.shopName}`,
+    `Stand: ${input.todayLabel}`,
+    `Arbeitstage: ${input.workdays.elapsedWorkdays}/${input.workdays.totalWorkdays}, Rest: ${input.workdays.remainingWorkdays}`,
+    `DSL/TV Relation: ${input.dslTvRatio ?? "nicht belastbar"}`,
+    `Mobilfunk-Mix: ${input.mobileRatio ?? "nicht belastbar"}`,
+    `Datenpflege/Fleiss: ${input.dataCare}`,
+    "",
+    "Fokus-KPIs:",
+    JSON.stringify(input.focusRows.map(formatMailKpiForPrompt)),
+    "",
+    "Qualitaets- und Fleissthemen:",
+    JSON.stringify(input.qualityRows.map(formatMailKpiForPrompt)),
+    "",
+    "Schreibe daraus eine vorbereitete Morgenmail an das Team."
+  ].join("\n");
+
+  return callOpenAiText({
+    input: prompt,
+    instructions: TEAM_MAIL_SYSTEM_PROMPT,
+    maxOutputTokens: 420,
+    timeoutMs: 7000
   });
 }
 
@@ -220,6 +266,7 @@ function formatKpiForPrompt(row: AiKpiInput) {
   return [
     row.kpi,
     row.category,
+    `Wertart ${valueTypeLabel(row.valueType)}`,
     `Status ${row.status}`,
     `Ist ${formatKpiValue(row.actual, row.valueType)}`,
     `Ziel ${formatKpiValue(row.target, row.valueType)}`,
@@ -228,11 +275,37 @@ function formatKpiForPrompt(row: AiKpiInput) {
   ].join(" | ");
 }
 
+function formatMailKpiForPrompt(row: AiKpiInput) {
+  return {
+    bedarfProArbeitstagBis100: formatKpiValue(row.requiredPerWorkday100, row.valueType),
+    ist: formatKpiValue(row.actual, row.valueType),
+    kategorie: row.category,
+    kpi: row.kpi,
+    runrateProzent: row.runratePercent === null ? null : `${formatNumber(row.runratePercent, 1)}%`,
+    status: row.status,
+    wertart: valueTypeLabel(row.valueType),
+    ziel: formatKpiValue(row.target, row.valueType)
+  };
+}
+
+function valueTypeLabel(valueType: "money" | "count" | "score") {
+  if (valueType === "money") {
+    return "Provision in EUR";
+  }
+
+  if (valueType === "count") {
+    return "Stueckzahl/Abschluss";
+  }
+
+  return "Qualitaetswert/Score";
+}
+
 const TODAY_IMPORTANT_SYSTEM_PROMPT = [
   "Du bist DiVA, ein freundlicher, klarer Shop-Coach fuer einen Telekom-Shop.",
   "Schreibe locker, motivierend und alltagstauglich fuer Shopleitung und Morgenrunde.",
   "Fokus: Was ist heute wichtig, warum, und was ist die naechste konkrete Aktion?",
   "Maximal 2 kurze Saetze. Keine langen Erklaerungen. Keine erfundenen Daten.",
+  "Verwende nie die Begriffe Mehrumsatz, Umsatz oder Erloes. Geldwerte heissen Provisionen, Count-Werte heissen Stueckzahlen oder Abschluesse.",
   "Wenn Daten fehlen, erinnere kurz und freundlich an Pflege."
 ].join(" ");
 
@@ -242,7 +315,21 @@ const MORNING_BRIEFING_SYSTEM_PROMPT = [
   "Nutze MyProv, DWH, Qualitaet, tNPS, Runrate, Rest-Arbeitstage und Zielpfad.",
   "Erkenne nur die wichtigsten Auffaelligkeiten: Fokus-KPI, DSL/TV, MF-Mix, Qualitaet, Datenpflege.",
   "Gib maximal 5 kurze Bulletpoints: Fokus, Lage, Auffaelligkeit, Aktion, Pflegehinweis.",
+  "Verwende nie die Begriffe Mehrumsatz, Umsatz oder Erloes. MyProv und EUR-Werte sind Provisionen, DWH/Count-Werte sind Stueckzahlen.",
   "Kein Roman, kein Consulting-Sprech, keine erfundenen Ursachen."
+].join(" ");
+
+const TEAM_MAIL_SYSTEM_PROMPT = [
+  "Du schreibst eine vorbereitete Morgenmail fuer das Team eines Telekom-Shops.",
+  "Ton: Team soll sich angesprochen fuehlen. Warm, motivierend und klar, aber nicht hart oder persoenlich vorwurfsvoll.",
+  "Formatiere exakt so: erste Zeile 'Betreff: ...', dann eine Leerzeile, dann der Mailtext.",
+  "Beginne den Mailtext mit 'Guten Morgen zusammen,'.",
+  "Schreibe 5 bis 8 kurze Zeilen oder kurze Absaetze. Kein langer Bericht.",
+  "Nenne den wichtigsten Fokus, ein klares Tagesziel oder Tagesverhalten und einen zweiten Blick.",
+  "Packe Qualitaets- und Fleissthemen hinein: Datenpflege, aktuelle Wochenwerte, Portierungen ohne Datum, tNPS oder Qualitaets-KPIs, wenn sie in den Daten stehen.",
+  "Wichtig: Verwende nie die Begriffe Mehrumsatz, Umsatz oder Erloes. Geldwerte sind Provisionen in EUR. Count-Werte sind Stueckzahlen oder Abschluesse. Score-Werte sind Qualitaet.",
+  "Nutze nur die bereitgestellten Daten. Erfinde keine Aktionen, Personen, Kundentermine oder Ursachen.",
+  "Ende mit einem kurzen gemeinsamen Abschluss, nicht mit einer Floskel aus dem Konzernsprech."
 ].join(" ");
 
 const DIVA_SYSTEM_PROMPT = [
@@ -254,6 +341,7 @@ const DIVA_SYSTEM_PROMPT = [
   "Wenn etwas nur eine Vermutung ist, schreibe 'Hypothese:' und halte es knapp.",
   "Fokus: Quartalsziel, Runrate, MyProv, DWH, Qualitaet, tNPS, Kundenfrequenz, Conversion, Portierungen, Tarifmix und Kalenderwochen.",
   "Achte besonders auf einfache Muster: TV zu DSL, MF zu DSL, PK/GK-Mix, Provision je Abschluss, Portierungsbeitrag und schwache/starke Wochen.",
+  "Verwende nie 'Mehrumsatz'. MyProv/EUR-Werte sind Provisionen; DWH/Count-Werte sind Stueckzahlen oder Abschluesse; Qualitaetswerte bleiben Qualitaet.",
   "Gib konkrete Mini-Aktionen fuer heute oder die Morgenrunde. Beispiel: Frage, Fokus, Coaching-Impuls, Nachfassaktion.",
   "Wenn Daten fehlen, sag freundlich, was gepflegt werden sollte.",
   "Keine sensiblen personenbezogenen Daten anfordern oder wiedergeben."

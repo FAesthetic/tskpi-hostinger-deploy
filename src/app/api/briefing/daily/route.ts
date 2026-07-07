@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { generateMorningBriefing } from "@/lib/ai/openai";
+import { generateTeamMailDraft } from "@/lib/ai/openai";
 import { calculateKpiMetric, type KpiMetric } from "@/lib/kpi/calculations";
 import { getCurrentQuarter, getQuarterBounds, summarizeQuarterWorkdays } from "@/lib/kpi/dates";
 import { displayCategoryLabel, displayKpiName } from "@/lib/kpi/display";
@@ -267,7 +267,7 @@ async function buildBriefingPayload(supabase: BriefingSupabaseClient, shop: Shop
   const dslTvRatio = buildRatioInsight(rows, "units_broadband_pk", "units_tv", "DSL", "TV");
   const mobileRatio = buildRatioInsight(rows, "units_mobile_pk", "units_mobile_gk", "MF PK", "MF GK");
   const dataCare = buildDataCareReminder(entries);
-  const fallbackAnalysisText = buildAnalysisText({
+  const fallbackEmailBody = buildTeamMailBody({
     critical,
     dataCare,
     dslTvRatio,
@@ -278,31 +278,27 @@ async function buildBriefingPayload(supabase: BriefingSupabaseClient, shop: Shop
     topPerformer,
     workdays
   });
-  const aiAnalysisText = await generateMorningBriefing({
+  const aiEmailBody = await generateTeamMailDraft({
     dataCare,
     dslTvRatio,
+    focusRows: [critical, runnerUp, topPerformer].filter(Boolean).map((row) => toAiKpiInput(row)),
     mobileRatio,
-    rows: rows.map((row) => ({
-      actual: row.actual,
-      category: row.category,
-      kpi: row.kpi,
-      requiredPerWorkday100: row.metric.requiredDailyAverage,
-      runratePercent: row.runratePercent,
-      status: row.metric.status,
-      target: row.target,
-      valueType: row.valueType
-    })),
+    qualityRows: rows
+      .filter((row) => row.category === "Qualitaet" || row.valueType === "score")
+      .sort((a, b) => urgencyScore(a) - urgencyScore(b))
+      .slice(0, 3)
+      .map((row) => toAiKpiInput(row)),
     shopName: shop.name,
     todayLabel,
     workdays
   });
-  const analysisText = aiAnalysisText ?? fallbackAnalysisText;
+  const emailBody = aiEmailBody ?? fallbackEmailBody;
 
   return {
-    analysisMode: aiAnalysisText ? "openai" : "rules",
-    analysisText,
-    emailBody: analysisText,
-    emailSubject: `TS KPI Morgenbriefing: ${shop.name}`,
+    analysisMode: aiEmailBody ? "openai" : "rules",
+    analysisText: emailBody,
+    emailBody,
+    emailSubject: `TS KPI Morgenfokus: ${shop.name}`,
     generatedAt: new Date().toISOString(),
     quarter: current.quarter,
     rows: rows.map((row) => ({
@@ -386,6 +382,49 @@ function buildAnalysisText({
   return lines.filter(Boolean).join("\n");
 }
 
+function buildTeamMailBody({
+  critical,
+  dataCare,
+  dslTvRatio,
+  mobileRatio,
+  runnerUp,
+  shopName,
+  todayLabel,
+  topPerformer,
+  workdays
+}: {
+  critical: BriefingRow | null;
+  dataCare: string;
+  dslTvRatio: string | null;
+  mobileRatio: string | null;
+  runnerUp: BriefingRow | null;
+  shopName: string;
+  todayLabel: string;
+  topPerformer: BriefingRow | null;
+  workdays: { remainingWorkdays: number };
+}) {
+  const lines = [
+    "Guten Morgen zusammen,",
+    "",
+    `kurzer Fokus fuer ${shopName}, Stand ${todayLabel}:`,
+    critical
+      ? `Heute liegt unser Blick zuerst auf ${critical.kpi}. Aktuell zeigt die Prognose ${formatNumber(critical.runratePercent, 1)}% Zielpfad; fuer 100% brauchen wir ab jetzt im Schnitt ${formatKpiValue(critical.metric.requiredDailyAverage, critical.valueType)} pro Arbeitstag.`
+      : "Heute gibt es noch keinen eindeutigen kritischen KPI. Bitte Ziele und aktuelle Werte einmal sauber pruefen.",
+    runnerUp
+      ? `Zweiter Blick: ${runnerUp.kpi} bei ${formatNumber(runnerUp.runratePercent, 1)}% Prognose.`
+      : null,
+    topPerformer
+      ? `Stabil wirkt aktuell ${topPerformer.kpi}. Das nehmen wir gern als positives Signal mit.`
+      : null,
+    dslTvRatio ? `Im Mix bitte mitdenken: ${dslTvRatio}.` : null,
+    mobileRatio ? `Mobilfunk-Mix: ${mobileRatio}.` : null,
+    `Qualitaet und Fleiss: ${dataCare.replace(/^Datenpflege:\s*/i, "")}`,
+    `Lasst uns heute klar fokussieren, sauber pflegen und die Chancen im Gespraech mitnehmen. Rest-Arbeitstage: ${workdays.remainingWorkdays}.`
+  ];
+
+  return lines.filter(Boolean).join("\n");
+}
+
 function buildUserPrompt(
   shopName: string,
   rows: BriefingRow[],
@@ -411,6 +450,42 @@ function buildUserPrompt(
       }))
     )}`
   ].join("\n");
+}
+
+function toAiKpiInput(row: BriefingRow) {
+  return {
+    actual: row.actual,
+    category: row.category,
+    kpi: row.kpi,
+    requiredPerWorkday100: row.metric.requiredDailyAverage,
+    runratePercent: row.runratePercent,
+    status: statusLabel(row.metric.status),
+    target: row.target,
+    valueType: row.valueType
+  };
+}
+
+function urgencyScore(row: BriefingRow) {
+  if (row.target <= 0) {
+    return 999;
+  }
+
+  if (row.metric.runrateForecast === null) {
+    return 998;
+  }
+
+  return row.metric.runrateForecast / row.target;
+}
+
+function statusLabel(status: string) {
+  const labels: Record<string, string> = {
+    green: "Gruen",
+    neutral: "Offen",
+    red: "Rot",
+    yellow: "Gelb"
+  };
+
+  return labels[status] ?? status;
 }
 
 function buildDataCareReminder(entries: Entry[]) {
@@ -467,11 +542,9 @@ function getMissingConfig() {
 }
 
 const MORNING_BRIEFING_SYSTEM_PROMPT = [
-  "Du bist der analytische Fuehrungsassistent fuer einen Telekom-Shop.",
-  "Sprich knapp, direkt und handlungsorientiert wie fuer eine Morgenrunde.",
-  "Nutze MyProv, DWH, Qualitaet, tNPS, Runrate, Rest-Arbeitstage und Zielpfad.",
-  "Erkenne auffaellige Mixe wie DSL zu TV, MF PK zu MF GK, Qualitaet zu Absatz oder starke Abweichungen zur Runrate.",
-  "Gib konkrete Massnahmen: Fokus im Tagesbriefing, Verkaufsfrage, Training, Coaching oder Portierungs-/Nachfassaktion.",
-  "Erinnere kurz an Datenpflege, wenn aktuelle Wochenwerte oder Staende fehlen koennten.",
-  "Keine langen Erklaerungen. Maximal 6 kurze Bulletpoints plus ein Tagesfokus."
+  "Team-Mail fuer den Morgenfokus.",
+  "Ton: teamnah, motivierend, klar, nicht vorwurfsvoll.",
+  "Keine Begriffe wie Mehrumsatz, Umsatz oder Erloes. Geldwerte sind Provisionen; Count-Werte sind Stueckzahlen oder Abschluesse.",
+  "Qualitaet und Fleissthemen wie Datenpflege, Wochenwerte, tNPS, Portierungen ohne Datum und Qualitaets-KPIs beruecksichtigen.",
+  "Kurz genug fuer eine echte Morgenmail."
 ].join(" ");

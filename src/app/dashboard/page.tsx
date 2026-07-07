@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BarChart3, ClipboardCheck, Settings, TableProperties } from "lucide-react";
+import { BarChart3, ClipboardCheck, Mail, RefreshCcw, Settings, TableProperties } from "lucide-react";
 import {
   saveDailyKpiEntriesAction,
   saveQuarterAdjustmentAction,
@@ -17,11 +17,12 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ShopCreatePanel } from "@/components/shops/ShopCreatePanel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { SubmitButton } from "@/components/ui/SubmitButton";
-import { generateTodayImportantInsight } from "@/lib/ai/openai";
+import { generateTeamMailDraft, generateTodayImportantInsight } from "@/lib/ai/openai";
 import { calculateKpiMetric, type KpiMetric } from "@/lib/kpi/calculations";
 import {
   getQuarterBounds,
   listQuarterDates,
+  parseDateKey,
   summarizeQuarterWorkdays,
   toDateKey,
   type Quarter,
@@ -39,7 +40,10 @@ import {
 } from "@/lib/data/app-context";
 
 type SearchParams = {
+  aiFocus?: string;
   focusKpi?: string;
+  mail?: string;
+  mailRefresh?: string;
   saved?: string;
   shop?: string;
   week?: string;
@@ -103,6 +107,12 @@ type KpiRow = {
 };
 
 type DailyTotalsByKpi = Map<string, Map<string, number>>;
+
+type TeamMailDraft = {
+  body: string;
+  mode: "openai" | "rules";
+  subject: string;
+};
 
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   const context = await getAuthenticatedAppContext();
@@ -352,16 +362,64 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     workdays,
     year
   });
-  const aiTodayImportant = searchParams.saved
-    ? null
-    : await generateTodayImportantInsight({
-        critical: critical ? toAiKpiInput(critical) : null,
-        portingsWithoutDate,
-        remainingWorkdays: workdays.remainingWorkdays,
-        runnerUp: focusCards[1] ? toAiKpiInput(focusCards[1]) : null,
-        shopName: selectedShop.name,
-        topPerformer: stableCards[0] ? toAiKpiInput(stableCards[0]) : null
-      });
+  const todayLabel = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium" }).format(parseDateKey(today));
+  const dataCare = buildDashboardDataCareReminder(entries, portingsWithoutDate, today);
+  const dslTvRatio = buildKpiRatioInsight(cards, "units_broadband_pk", "units_tv", "DSL", "TV");
+  const mobileRatio = buildKpiRatioInsight(cards, "units_mobile_pk", "units_mobile_gk", "MF PK", "MF GK");
+  const mailFocusRows = uniqueKpiRows([critical, focusCards[1] ?? null, stableCards[0] ?? null]);
+  const qualityRows = cards
+    .filter((card) => card.kpi.category === "quality" && card.metric.target > 0)
+    .sort((a, b) => urgencyScore(a) - urgencyScore(b))
+    .slice(0, 3);
+  const tnpsMailRow = buildTnpsMailRow(currentTnps, tnpsTarget?.target_value ?? 0);
+  const fallbackTeamMail = buildFallbackTeamMailDraft({
+    critical,
+    dataCare,
+    dslTvRatio,
+    mobileRatio,
+    runnerUp: focusCards[1] ?? null,
+    shopName: selectedShop.name,
+    todayLabel,
+    topPerformer: stableCards[0] ?? null,
+    workdays
+  });
+  const shouldGenerateAiFocus = searchParams.aiFocus === "regen" || !searchParams.saved;
+  const shouldGenerateTeamMail = searchParams.mail === "regen" || !searchParams.saved;
+  const [aiTodayImportant, aiTeamMailText] = await Promise.all([
+    shouldGenerateAiFocus
+      ? generateTodayImportantInsight({
+          critical: critical ? toAiKpiInput(critical) : null,
+          portingsWithoutDate,
+          remainingWorkdays: workdays.remainingWorkdays,
+          runnerUp: focusCards[1] ? toAiKpiInput(focusCards[1]) : null,
+          shopName: selectedShop.name,
+          topPerformer: stableCards[0] ? toAiKpiInput(stableCards[0]) : null
+        })
+      : Promise.resolve(null),
+    shouldGenerateTeamMail
+      ? generateTeamMailDraft({
+          dataCare,
+          dslTvRatio,
+          focusRows: mailFocusRows.map((row) => toAiKpiInput(row)),
+          mobileRatio,
+          qualityRows: [
+            ...qualityRows.map((row) => toAiKpiInput(row)),
+            ...(tnpsMailRow ? [tnpsMailRow] : [])
+          ],
+          shopName: selectedShop.name,
+          todayLabel,
+          workdays
+        })
+      : Promise.resolve(null)
+  ]);
+  const teamMailDraft = parseTeamMailDraft(aiTeamMailText, fallbackTeamMail.subject) ?? fallbackTeamMail;
+  const teamMailRegenerateHref = buildTeamMailRegenerateHref({
+    quarter,
+    selectedShopId: selectedShop.id,
+    weekKey: selectedWeek.key,
+    year
+  });
+  const teamMailMailtoHref = buildMailtoHref(teamMailDraft);
 
   return (
     <AppShell
@@ -377,6 +435,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
         aiTodayImportant={aiTodayImportant}
         critical={critical}
         focusCards={focusCards}
+        teamMailDraft={teamMailDraft}
+        teamMailMailtoHref={teamMailMailtoHref}
+        teamMailRegenerateHref={teamMailRegenerateHref}
         overallTone={overallTone}
         portingsWithoutDate={portingsWithoutDate}
         remainingWorkdays={workdays.remainingWorkdays}
@@ -551,7 +612,10 @@ function CommandHero({
   focusCards,
   overallTone,
   portingsWithoutDate,
-  remainingWorkdays
+  remainingWorkdays,
+  teamMailDraft,
+  teamMailMailtoHref,
+  teamMailRegenerateHref
 }: {
   aiTodayImportant: string | null;
   critical: KpiRow | null;
@@ -559,6 +623,9 @@ function CommandHero({
   overallTone: "green" | "yellow" | "red" | "neutral";
   portingsWithoutDate: number;
   remainingWorkdays: number;
+  teamMailDraft: TeamMailDraft;
+  teamMailMailtoHref: string;
+  teamMailRegenerateHref: string;
 }) {
   const runnerUp = focusCards[1] ?? null;
   const headline = overallTone === "green"
@@ -610,6 +677,12 @@ function CommandHero({
             )}
           </p>
 
+          <TeamMailDraftPanel
+            mailtoHref={teamMailMailtoHref}
+            regenerateHref={teamMailRegenerateHref}
+            teamMailDraft={teamMailDraft}
+          />
+
           <div className="mt-6 grid gap-3 sm:grid-cols-4">
             <MiniMetric
               label="Runrate Ende Quartal"
@@ -652,6 +725,46 @@ function CommandHero({
         </div>
       </div>
     </section>
+  );
+}
+
+function TeamMailDraftPanel({
+  mailtoHref,
+  regenerateHref,
+  teamMailDraft
+}: {
+  mailtoHref: string;
+  regenerateHref: string;
+  teamMailDraft: TeamMailDraft;
+}) {
+  return (
+    <div className="mt-6 rounded-xl border border-white/[0.08] bg-white/[0.035] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pulse-300">
+            Team-Mail
+          </p>
+          <h2 className="mt-2 text-lg font-semibold text-white">{teamMailDraft.subject}</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {teamMailDraft.mode === "openai" ? "AI-Entwurf aus aktuellen Zahlen" : "Regelentwurf aus aktuellen Zahlen"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a className="secondary-button inline-flex h-10 items-center justify-center gap-2 px-3" href={mailtoHref}>
+            <Mail aria-hidden className="h-4 w-4" />
+            Mail oeffnen
+          </a>
+          <Link className="secondary-button inline-flex h-10 items-center justify-center gap-2 px-3" href={regenerateHref} scroll={false}>
+            <RefreshCcw aria-hidden className="h-4 w-4" />
+            Neu generieren
+          </Link>
+        </div>
+      </div>
+
+      <div className="mt-4 whitespace-pre-wrap rounded-lg border border-white/[0.08] bg-black/20 p-4 text-sm leading-6 text-slate-300">
+        {teamMailDraft.body}
+      </div>
+    </div>
   );
 }
 
@@ -1343,13 +1456,209 @@ function dailyInputLabel(kpi: KpiDefinition) {
   return labels[kpi.code] ?? displayKpiName(kpi.code, kpi.name);
 }
 
+function buildDashboardDataCareReminder(
+  entries: DailyEntry[],
+  portingsWithoutDate: number,
+  today: string
+) {
+  const latestEntryDate = entries.reduce(
+    (latest, entry) => (entry.entry_date > latest ? entry.entry_date : latest),
+    ""
+  );
+  const parts: string[] = [];
+
+  if (!latestEntryDate) {
+    parts.push("noch keine KPI-Werte im Quartal, aktuelle Staende oder Wochenwerte eintragen");
+  } else {
+    const daysSinceLatest = Math.max(
+      0,
+      Math.floor((parseDateKey(today).getTime() - parseDateKey(latestEntryDate).getTime()) / 86_400_000)
+    );
+
+    if (daysSinceLatest >= 7) {
+      parts.push(`letzter KPI-Eintrag vor ${daysSinceLatest} Tagen, Wochenwerte bitte nachziehen`);
+    } else {
+      parts.push("Wochenwerte und aktuelle Staende heute kurz gegenpruefen");
+    }
+  }
+
+  if (portingsWithoutDate > 0) {
+    parts.push(`${portingsWithoutDate} Portierungen ohne Datum klaeren`);
+  }
+
+  return `Datenpflege: ${parts.join("; ")}.`;
+}
+
+function buildKpiRatioInsight(
+  rows: KpiRow[],
+  numeratorCode: string,
+  denominatorCode: string,
+  numeratorLabel: string,
+  denominatorLabel: string
+) {
+  const numerator = rows.find((row) => row.kpi.code === numeratorCode)?.metric.actual ?? 0;
+  const denominator = rows.find((row) => row.kpi.code === denominatorCode)?.metric.actual ?? 0;
+
+  if (numerator <= 0 || denominator <= 0) {
+    return null;
+  }
+
+  return `${formatNumber(numerator / denominator, 1)} zu 1 ${numeratorLabel}/${denominatorLabel}`;
+}
+
+function uniqueKpiRows(rows: Array<KpiRow | null>) {
+  const seen = new Set<string>();
+
+  return rows.filter((row): row is KpiRow => {
+    if (!row || seen.has(row.kpi.id)) {
+      return false;
+    }
+
+    seen.add(row.kpi.id);
+    return true;
+  });
+}
+
+function buildTnpsMailRow(currentTnps: TnpsEntry | null, target: number) {
+  if (!currentTnps && target <= 0) {
+    return null;
+  }
+
+  const actual = currentTnps?.value ?? 0;
+  const runratePercent = target > 0 ? (actual / target) * 100 : null;
+
+  return {
+    actual,
+    category: "Qualitaet",
+    kpi: "tNPS",
+    requiredPerWorkday100: null,
+    runratePercent,
+    status: statusLabel(
+      target <= 0
+        ? "neutral"
+        : actual >= target
+          ? "green"
+          : actual >= target * 0.9
+            ? "yellow"
+            : "red"
+    ),
+    target,
+    valueType: "score" as const
+  };
+}
+
+function buildFallbackTeamMailDraft({
+  critical,
+  dataCare,
+  dslTvRatio,
+  mobileRatio,
+  runnerUp,
+  shopName,
+  todayLabel,
+  topPerformer,
+  workdays
+}: {
+  critical: KpiRow | null;
+  dataCare: string;
+  dslTvRatio: string | null;
+  mobileRatio: string | null;
+  runnerUp: KpiRow | null;
+  shopName: string;
+  todayLabel: string;
+  topPerformer: KpiRow | null;
+  workdays: WorkdaySummary;
+}): TeamMailDraft {
+  const subject = `TS KPI Morgenfokus: ${shopName}`;
+  const lines = [
+    "Guten Morgen zusammen,",
+    "",
+    `kurzer Fokus fuer ${shopName}, Stand ${todayLabel}:`,
+    critical
+      ? `Heute liegt unser Blick zuerst auf ${displayKpiName(critical.kpi.code, critical.kpi.name)}. Die Prognose steht bei ${formatNumber(forecastAchievementPercent(critical.metric), 1)}%; fuer den 100%-Pfad brauchen wir ab jetzt im Schnitt ${formatDailyNeed(critical.metric.requiredDailyAverage, critical.kpi.value_type)} pro Arbeitstag.`
+      : "Heute ist noch kein eindeutiger kritischer KPI erkennbar. Bitte Ziele und aktuelle Werte einmal sauber pruefen.",
+    runnerUp
+      ? `Zweiter Blick: ${displayKpiName(runnerUp.kpi.code, runnerUp.kpi.name)} liegt bei ${formatNumber(forecastAchievementPercent(runnerUp.metric), 1)}% Prognose.`
+      : null,
+    topPerformer
+      ? `Positiv mitnehmen: ${displayKpiName(topPerformer.kpi.code, topPerformer.kpi.name)} wirkt aktuell am stabilsten.`
+      : null,
+    dslTvRatio ? `Im Mix bitte mitdenken: ${dslTvRatio}.` : null,
+    mobileRatio ? `Mobilfunk-Mix: ${mobileRatio}.` : null,
+    `Qualitaet und Fleiss: ${dataCare.replace(/^Datenpflege:\s*/i, "")}`,
+    `Lasst uns heute fokussiert starten, sauber pflegen und die Chancen im Gespraech mitnehmen. Rest-Arbeitstage: ${workdays.remainingWorkdays}.`
+  ];
+
+  return {
+    body: lines.filter(Boolean).join("\n"),
+    mode: "rules",
+    subject
+  };
+}
+
+function parseTeamMailDraft(text: string | null, fallbackSubject: string): TeamMailDraft | null {
+  if (!text?.trim()) {
+    return null;
+  }
+
+  const lines = text.trim().split(/\r?\n/);
+  const subjectIndex = lines.findIndex((line) => /^betreff\s*:/i.test(line.trim()));
+  const subject =
+    subjectIndex >= 0
+      ? lines[subjectIndex].replace(/^betreff\s*:/i, "").trim() || fallbackSubject
+      : fallbackSubject;
+  const bodyLines = subjectIndex >= 0 ? lines.slice(subjectIndex + 1) : lines;
+  const body = bodyLines.join("\n").replace(/^\s+/, "").trim();
+
+  if (!body) {
+    return null;
+  }
+
+  return {
+    body,
+    mode: "openai",
+    subject
+  };
+}
+
+function buildTeamMailRegenerateHref({
+  quarter,
+  selectedShopId,
+  weekKey,
+  year
+}: {
+  quarter: Quarter;
+  selectedShopId: string;
+  weekKey: string;
+  year: number;
+}) {
+  const params = new URLSearchParams({
+    mail: "regen",
+    mailRefresh: String(Date.now()),
+    quarter: String(quarter),
+    shop: selectedShopId,
+    week: weekKey,
+    year: String(year)
+  });
+
+  return `/dashboard?${params.toString()}`;
+}
+
+function buildMailtoHref(draft: TeamMailDraft) {
+  const params = new URLSearchParams({
+    body: draft.body,
+    subject: draft.subject
+  });
+
+  return `mailto:?${params.toString()}`;
+}
+
 function buildDailyFocusHint(
   kpiName: string,
   requiredFor90: number | null,
   requiredFor100: number | null,
   valueType: "money" | "count" | "score"
 ) {
-  return `${kpiName} ist aktuell der wichtigste Fokus. Fuer 90 Prozent Zielerreichung werden ab heute durchschnittlich ${formatKpiValue(requiredFor90, valueType)} pro Arbeitstag benoetigt, fuer 100 Prozent ${formatKpiValue(requiredFor100, valueType)}. Plane heute zuerst konkrete Aktivitaeten fuer diesen KPI ein.`;
+  return `${kpiName} ist aktuell der wichtigste Fokus. Fuer 90 Prozent Zielerreichung werden ab heute durchschnittlich ${formatDailyNeed(requiredFor90, valueType)} pro Arbeitstag benoetigt, fuer 100 Prozent ${formatDailyNeed(requiredFor100, valueType)}. Plane heute zuerst konkrete Aktivitaeten fuer diesen KPI ein.`;
 }
 
 function buildHint(
@@ -1361,7 +1670,21 @@ function buildHint(
     return `${kpiName} braucht Aufmerksamkeit. Sobald weitere Arbeitstage im Quartal verbleiben, wird der konkrete Tagesbedarf berechnet.`;
   }
 
-  return `${kpiName} ist aktuell der kritischste KPI. Fuer 100 Prozent Zielerreichung werden ab heute durchschnittlich ${formatKpiValue(requiredDailyAverage, valueType)} pro Arbeitstag benoetigt.`;
+  return `${kpiName} ist aktuell der kritischste KPI. Fuer 100 Prozent Zielerreichung werden ab heute durchschnittlich ${formatDailyNeed(requiredDailyAverage, valueType)} pro Arbeitstag benoetigt.`;
+}
+
+function formatDailyNeed(value: number | null, valueType: "money" | "count" | "score") {
+  const formatted = formatKpiValue(value, valueType);
+
+  if (valueType === "money") {
+    return `${formatted} Provision`;
+  }
+
+  if (valueType === "count") {
+    return `${formatted} Stueck`;
+  }
+
+  return `${formatted} Qualitaetspunkte`;
 }
 
 function urgencyScore(row: KpiRow) {
