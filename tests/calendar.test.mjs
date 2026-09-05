@@ -144,7 +144,7 @@ test('an unreviewed inquiry persists without SMTP and returns an honest durable 
   assert.equal(saved.event_date, data.date);
   assert.equal(saved.status, 'requested');
   assert.equal(saved.unit, null, 'A request must not claim or reserve a physical box.');
-  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM outbox').get().count, 0);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM outbox').get().count, 2, 'Both emails wait durably for the mail connection.');
   assert.equal(sent.length, 0);
 });
 
