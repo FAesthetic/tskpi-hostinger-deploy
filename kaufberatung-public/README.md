@@ -1,7 +1,11 @@
-# Bierlich Kaufberatung
+# Bierlich Kaufberatung — Hostinger static release
 
-Static release for kaufberatung.bierlich.cloud, deployed on the existing Hostinger VPS.
+Public website: https://kaufberatung.bierlich.cloud/
 
-Includes the German purchase-advisory landing page and transparent service prices: 89 EUR decision consultation, 249 EUR purchase research, 429 EUR organization package, and 89 EUR per additional hour.
+Release: 2026-09-06. Includes bounded service packages (79 €, 199 €, 349 €), additional support at 79 €/hour in 15-minute units, real contact links, imprint, privacy, fictional example cases, one-page sample decision PDF, and matching structured data. End prices under § 19 UStG.
 
-The archive contains only public HTML, styles, local fonts and imagery. No server runtime, credentials or customer data are included.
+The archive contains static public website files only. No customer data, credentials, source maps or executable JavaScript. Fonts and imagery are served locally.
+
+Deployed only in Hostinger project `bierlich-kaufberatung`. The container downloads this artifact using a pinned commit URL, verifies its SHA-256 and serves it with nginx.
+
+Artifact SHA-256: `aa747c4164be4e02e4ebace8c195359d63959fdbfe8302943c3af1bac54b4285`
