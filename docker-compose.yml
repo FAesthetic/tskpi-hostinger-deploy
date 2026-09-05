@@ -1,0 +1,57 @@
+{
+  "services": {
+    "site": {
+      "image": "nginx:stable-alpine",
+      "restart": "unless-stopped",
+      "command": [
+        "/bin/sh",
+        "-c",
+        "set -eu; mkdir -p /opt/dienstleister; wget -q -T 45 -O /tmp/site.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/07997ce2317e2d52daa2e02241b7e74122a5ac36; tar xzf /tmp/site.tar.gz -C /opt/dienstleister --strip-components=1; rm /tmp/site.tar.gz; exec nginx -c /opt/dienstleister/nginx.conf -g \"daemon off;\""
+      ],
+      "networks": [
+        "web"
+      ],
+      "labels": {
+        "traefik.enable": "true",
+        "traefik.docker.network": "web",
+        "traefik.http.routers.dienstleister-route.rule": "Host(`dienstleister.bierlich.cloud`)",
+        "traefik.http.routers.dienstleister-route.entrypoints": "websecure",
+        "traefik.http.routers.dienstleister-route.tls": "true",
+        "traefik.http.routers.dienstleister-route.tls.certresolver": "le",
+        "traefik.http.routers.dienstleister-route.service": "dienstleister-service",
+        "traefik.http.routers.dienstleister-http.rule": "Host(`dienstleister.bierlich.cloud`)",
+        "traefik.http.routers.dienstleister-http.entrypoints": "web",
+        "traefik.http.routers.dienstleister-http.middlewares": "dienstleister-https",
+        "traefik.http.routers.dienstleister-http.service": "dienstleister-service",
+        "traefik.http.middlewares.dienstleister-https.redirectscheme.scheme": "https",
+        "traefik.http.middlewares.dienstleister-https.redirectscheme.permanent": "true",
+        "traefik.http.services.dienstleister-service.loadbalancer.server.port": "8080"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "wget",
+          "--spider",
+          "-q",
+          "http://127.0.0.1:8080/"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3,
+        "start_period": "45s"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      }
+    }
+  },
+  "networks": {
+    "web": {
+      "external": true
+    }
+  }
+}
