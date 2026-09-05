@@ -6,7 +6,7 @@
       "command": [
         "/bin/sh",
         "-c",
-        "set -eu; mkdir -p /opt/fotobox; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/7e01bb546273c1ebcb46eb484969a0713e36a2a1; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; exec nginx -c /opt/fotobox/nginx.conf -g \"daemon off;\""
+        "set -eu; mkdir -p /opt/fotobox; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/a6909b4e699bc72242296255fbc5d86555e66448; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; exec nginx -c /opt/fotobox/nginx.conf -g \"daemon off;\""
       ],
       "networks": [
         "web",
@@ -53,7 +53,7 @@
       "command": [
         "/bin/sh",
         "-c",
-        "set -eu; umask 077; mkdir -p /opt/fotobox /data; chown node:node /data; chmod 700 /data; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/7e01bb546273c1ebcb46eb484969a0713e36a2a1; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; cd /opt/fotobox; npm ci --omit=dev --ignore-scripts --no-audit --no-fund; chmod -R a+rX /opt/fotobox; exec su node -s /bin/sh -c \"node /opt/fotobox/server/index.mjs\""
+        "set -eu; umask 077; mkdir -p /opt/fotobox /data; chown node:node /data; chmod 700 /data; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/a6909b4e699bc72242296255fbc5d86555e66448; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; cd /opt/fotobox; npm ci --omit=dev --ignore-scripts --no-audit --no-fund; chmod -R a+rX /opt/fotobox; exec su node -s /bin/sh -c \"node /opt/fotobox/server/index.mjs\""
       ],
       "environment": {
         "NODE_ENV": "production",
