@@ -5,3 +5,41 @@
 .product-figure[hidden]{display:none}.current-features{display:grid;grid-template-columns:repeat(3,1fr);gap:35px;margin-top:50px}.current-features strong{display:block;font:2rem Georgia,serif}.current-features span{display:block;margin-top:12px;color:#716567}@media(max-width:760px){.current-features{grid-template-columns:1fr;gap:24px}}
 
 .new-header{background:#030303}.legal{padding-top:145px}.footer .new-brand{color:#632b3b}.new-header nav,.pill{font-size:.875rem}.skip{z-index:100}.new-brand{white-space:nowrap}.legal{background:#faf7f2}
+
+/* Current wooden box: generous framing leaves room for the scroll close-up. */
+.product-figure{inset:43svh 0 -26svh;transform-origin:50% 42%}
+.product-figure img{mix-blend-mode:lighten}
+.product-note{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);z-index:7;font-size:.75rem;color:#b6aca3;text-underline-offset:4px;white-space:nowrap}
+.product-note:hover{text-decoration:underline}
+.real-box{display:grid;grid-template-columns:1fr 1fr;gap:clamp(30px,6vw,85px);align-items:center;margin-top:65px}
+.original-photo img{aspect-ratio:1;object-fit:cover;border-radius:4px}
+.original-photo figcaption{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:16px;font-size:.875rem;color:var(--muted)}
+.original-photo figcaption a{text-decoration:underline;text-underline-offset:4px}
+.real-box-copy h3{font:500 clamp(2.3rem,4vw,3.75rem)/1.1 var(--serif);letter-spacing:-1.5px;margin:20px 0 25px}
+.real-box-copy h3 em{font-weight:400;color:var(--wine)}
+.real-box-copy>p:not(.eyebrow){max-width:460px;color:var(--muted)}
+.real-box .current-features{display:grid;grid-template-columns:1fr;gap:22px;margin:30px 0;padding-top:25px}
+.real-box .current-features p{display:grid;grid-template-columns:145px 1fr;align-items:baseline;gap:14px}
+.real-box .current-features strong{font-size:1.65rem;letter-spacing:-.04em}
+.real-box .current-features span{font-size:.9375rem;margin:0}
+.location-section{max-width:none;background:#181514;color:#f8f5ef;padding:100px max(6vw,calc((100vw - 1190px)/2))}
+.location-heading{display:grid;grid-template-columns:1.15fr 1fr;gap:60px;align-items:end}
+.location-heading .eyebrow{color:#cbb19a}
+.location-heading h2{font:400 clamp(2.6rem,4.5vw,4.5rem)/1.1 var(--serif);letter-spacing:-1.7px;margin-top:23px}
+.location-heading h2 em{font-weight:400;color:#ddc7ae}
+.location-heading>p{color:#c0b7ae;max-width:470px;margin-bottom:4px}
+.visualization-note{color:#c0b7ae;font-size:.875rem;margin:32px 0 30px}
+.location-grid{display:grid;grid-template-columns:1fr 1fr;gap:38px 28px}
+.location-grid figure{min-width:0}
+.location-grid img{aspect-ratio:3/2;object-fit:cover;border-radius:3px}
+.location-grid figcaption{padding-top:20px}
+.location-grid figcaption span{font-size:.75rem;letter-spacing:1.4px;color:#c8b6a5}
+.location-grid h3{font:400 clamp(1.8rem,3vw,2.6rem)/1.2 var(--serif);margin-top:7px}
+.location-bottom{display:flex;align-items:center;justify-content:space-between;gap:35px;border-top:1px solid #48403a;margin-top:50px;padding-top:30px}
+.location-bottom p{max-width:640px;color:#c0b7ae;font-size:.9375rem}
+.location-bottom .pill{flex-shrink:0}
+@media(max-width:1000px){.real-box .current-features p{grid-template-columns:1fr;gap:2px}.location-heading{gap:30px}.real-box-copy h3{font-size:2.7rem}}
+@media(max-width:760px){.product-figure{inset:43svh -45vw -12svh}.real-box{grid-template-columns:1fr;gap:42px;margin-top:40px}.real-box-copy h3{font-size:2.5rem}.real-box .current-features p{grid-template-columns:140px 1fr;gap:10px}.location-section{padding:70px 24px}.location-heading{grid-template-columns:1fr;gap:24px}.location-heading h2{font-size:2.65rem}.location-grid{grid-template-columns:1fr;gap:36px}.location-grid h3{font-size:2.1rem}.location-bottom{align-items:flex-start;flex-direction:column;gap:25px;margin-top:38px}.visualization-note{margin-top:26px}.story-panel>p:not(.overline){font-size:1rem}.story-bottom{font-size:.75rem}.overline{font-size:.75rem;letter-spacing:1.25px}}
+@media(max-width:380px){.real-box .current-features p{grid-template-columns:1fr}.story-intro h1{font-size:3.25rem}.story-panel h2{font-size:2.3rem}}
+@media(max-width:760px){.product-note{display:block;bottom:56px}}
+@media(prefers-reduced-motion:reduce){.product-figure{position:relative;inset:auto;height:75svh;max-height:750px;transform:none}.product-figure img{mix-blend-mode:normal}.product-note{display:block;position:relative;inset:auto;transform:none;text-align:center;white-space:normal;margin:18px auto 30px}.location-grid{scroll-behavior:auto}}
