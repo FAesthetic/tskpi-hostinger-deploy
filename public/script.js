@@ -52,13 +52,16 @@ updateCalculator(); updateEnquiry();
 const dateField = form.elements.date;
 const now = new Date();
 dateField.min = [now.getFullYear(), String(now.getMonth() + 1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
-form.addEventListener('submit', event => {
+let requestEnabled=false;
+fetch('/api/config').then(r=>r.ok?r.json():null).then(c=>{requestEnabled=!!c?.requestEnabled;if(requestEnabled){document.querySelector('#request-button').textContent='Termin unverbindlich anfragen ↗';document.querySelector('#form-info').textContent='Wir prüfen euren Termin und die genaue Anfahrt. Eure Anfrage ist kostenlos und reserviert noch keine Fotobox. Bei Verfügbarkeit erhaltet ihr ein Angebot zum Onlineabschluss. Angaben zur Datenverarbeitung findet ihr im Datenschutz.';}}).catch(()=>{});
+form.addEventListener('submit', async event => {
   event.preventDefault();
   if (!form.reportValidity()) return;
   const data = new FormData(form);
+  if(requestEnabled && data.get('delivery')!=='Individuelle Anfrage'){const button=document.querySelector('#request-button');button.disabled=true;try{const res=await fetch('/api/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:data.get('names'),email:data.get('email'),phone:data.get('phone'),date:data.get('date'),location:data.get('location'),customerType:data.get('customerType'),delivery:data.get('delivery')==='Selbstabholung'?'pickup':'delivery',message:data.get('message'),website:data.get('website')})});const result=await res.json();if(!res.ok)throw Error(result.error);document.querySelector('#form-status').textContent='Eure Anfrage ist eingegangen. Referenz: '+result.reference+'. Ihr bekommt eine Eingangsbestätigung per E-Mail. Wir prüfen jetzt Termin und Anfahrt.';form.reset();return;}catch(e){document.querySelector('#form-status').textContent=e.message+' Ihr könnt uns auch direkt anrufen oder eine E-Mail schreiben.';return;}finally{button.disabled=false;}}
   const date = String(data.get('date')).split('-').reverse().join('.');
   const subject = `Fotobox-Anfrage für den ${date} – ${data.get('location')}`;
-  const body = `Hallo Fotobox Heide,\n\nwir möchten eine digitale Fotobox anfragen.\n\nNamen: ${data.get('names')}\nE-Mail: ${data.get('email')}\nDatum: ${date}\nOrt / Location: ${data.get('location')}\nÜbergabe: ${data.get('delivery')}\n${enquiryPriceText()}\n\n${data.get('message') || ''}\n\nBitte gebt uns Bescheid, ob unser Termin verfügbar ist, und bestätigt uns das vollständige Angebot.\n\nViele Grüße\n${data.get('names')}`;
+  const body = `Hallo Herzblende,\n\nwir möchten eine digitale Fotobox anfragen.\n\nNamen: ${data.get('names')}\nE-Mail: ${data.get('email')}\nDatum: ${date}\nOrt / Location: ${data.get('location')}\nÜbergabe: ${data.get('delivery')}\n${enquiryPriceText()}\n\n${data.get('message') || ''}\n\nBitte gebt uns Bescheid, ob unser Termin verfügbar ist, und bestätigt uns das vollständige Angebot.\n\nViele Grüße\n${data.get('names')}`;
   document.querySelector('#email-copy').value = body;
   document.querySelector('#email-fallback').hidden = false;
   document.querySelector('#form-status').textContent = 'Eure Anfrage ist vorbereitet, aber noch nicht gesendet. Sendet sie in eurem E-Mail-Programm. Falls es sich nicht öffnet: Kopiert den Text unten und schickt ihn an uhighcauseidope@gmail.com oder über Instagram.';
