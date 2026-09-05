@@ -38,7 +38,7 @@ export function createStore(directory,{now=()=>Date.now(),bootstrapHash=''}={}){
   if(['confirmed','refunded','cancelled','refund_pending','refund_failed'].includes(b.status))return true;
   const reserved=['checkout','processing','quoted'].includes(b.status)&&available(b.event_date,b.end_date,b.id).includes(b.unit);
   const state=reserved?'confirmed':'payment_review';db.prepare('UPDATE bookings SET status=?,payment_intent=?,confirmed=? WHERE id=?').run(state,typeof s.payment_intent==='string'?s.payment_intent:s.payment_intent?.id||null,now(),b.id);
-  if(reserved){const fresh=booking(b.id);enqueue(b.email,'Eure Herzblende-Buchung '+b.reference,confirmationText(fresh),confirmationText(fresh),'confirmation-'+b.id);}else enqueue(get('owner_email','uhighcauseidope@gmail.com'),'Herzblende: Zahlung bitte prüfen',`Buchung ${b.reference}: Zahlung eingegangen, Termin nicht automatisch bestätigt. Bitte zeitnah prüfen.`);
+  if(reserved){const fresh=booking(b.id);enqueue(b.email,'Eure Fotobox Rendsburg-Buchung '+b.reference,confirmationText(fresh),confirmationText(fresh),'confirmation-'+b.id);}else enqueue(get('owner_email','uhighcauseidope@gmail.com'),'Fotobox Rendsburg: Zahlung bitte prüfen',`Buchung ${b.reference}: Zahlung eingegangen, Termin nicht automatisch bestätigt. Bitte zeitnah prüfen.`);
  }else if(s.status==='complete'){if(['checkout','quoted','processing'].includes(b.status))db.prepare("UPDATE bookings SET status='processing' WHERE id=?").run(b.id);
  }else if(s.status==='expired'&&['checkout','quoted'].includes(b.status)){db.prepare('UPDATE bookings SET status=?,session_id=NULL WHERE id=?').run(b.quote_until>now()?'quoted':'expired',b.id);}
  return true;});
