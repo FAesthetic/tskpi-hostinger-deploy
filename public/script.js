@@ -1,79 +1,20 @@
 'use strict';
-const form = document.querySelector('#enquiry-form');
-const delivery = document.querySelector('#delivery');
-const distanceInput = document.querySelector('#distance');
-const useDistance = document.querySelector('#use-distance');
-const price = globalThis.fotoboxPricing;
-const money = cents => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
-const number = value => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 20 }).format(value);
-let selectedDistance = null;
-function currentDistance() {
-  return distanceInput.value !== '' && distanceInput.validity.valid ? distanceInput.valueAsNumber : null;
-}
-function updateCalculator() {
-  const distance = currentDistance();
-  const valid = distance !== null && Number.isFinite(distance);
-  distanceInput.setAttribute('aria-invalid', String(!valid));
-  useDistance.setAttribute('aria-disabled', String(!valid));
-  document.querySelector('#distance-error').textContent = valid ? '' : 'Bitte gebt eine Entfernung von 0 bis 1.000 km ein.';
-  if (!valid) {
-    document.querySelector('#travel-cost').textContent = '—';
-    document.querySelector('#total-cost').textContent = '—';
-    document.querySelector('#travel-explainer').textContent = 'Mit einer gültigen Entfernung berechnen wir die vier Fahrstrecken für Lieferung und Abholung.';
-    return;
-  }
-  const quote = price.quote(distance);
-  document.querySelector('#travel-cost').textContent = money(quote.travelCents);
-  document.querySelector('#total-cost').textContent = money(quote.totalCents);
-  document.querySelector('#travel-explainer').textContent = distance <= 10
-    ? 'Bis einschließlich 10 km einfacher Straßenentfernung sind alle vier Fahrstrecken inklusive.'
-    : `Eingegeben: ${number(distance)} km → berechnet: ${quote.billedDistanceKm} km. (${quote.billedDistanceKm} − 10) × 4 × 0,60 € = ${money(quote.travelCents)} Fahrtkosten. Jeder zusätzliche 5-km-Schritt kostet insgesamt 12 € für Lieferung und Abholung.`;
-}
-function enquiryPriceText() {
-  if (delivery.value === 'Individuelle Anfrage') return 'Individuelle Anfrage: Umfang, Verfügbarkeit und Gesamtpreis bitte persönlich abstimmen.';
-  if (delivery.value === 'Selbstabholung') return 'Eine digitale Fotobox: 250,00 € bei Selbstabholung, ohne Fahrtkosten.';
-  if (selectedDistance === null) return 'Eine digitale Fotobox: 250,00 €. Fahrtkosten nach vereinbarter Entfernung.';
-  const quote = price.quote(selectedDistance);
-  return `Eine digitale Fotobox: ${money(quote.baseCents)} + ${money(quote.travelCents)} Fahrtkosten = ${money(quote.totalCents)} bei ${number(selectedDistance)} km einfacher Straßenentfernung, auf ${quote.billedDistanceKm} km aufgerundet. Vorabrechnung; die Route stimmen wir vor der Buchung ab.`;
-}
-function updateEnquiry() { document.querySelector('#inquiry-estimate').textContent = enquiryPriceText(); }
-distanceInput.addEventListener('input', updateCalculator);
-delivery.addEventListener('change', updateEnquiry);
-useDistance.addEventListener('click', event => {
-  const distance = currentDistance();
-  if (distance === null || !Number.isFinite(distance)) {
-    event.preventDefault(); distanceInput.reportValidity(); distanceInput.focus(); return;
-  }
-  selectedDistance = distance;
-  delivery.value = 'Lieferung & Abholung';
-  updateEnquiry();
-});
-updateCalculator(); updateEnquiry();
-const dateField = form.elements.date;
-const now = new Date();
-dateField.min = [now.getFullYear(), String(now.getMonth() + 1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
-let requestEnabled=false;
-fetch('/api/config').then(r=>r.ok?r.json():null).then(c=>{requestEnabled=!!c?.requestEnabled;if(requestEnabled){document.querySelector('#request-button').textContent='Termin unverbindlich anfragen ↗';document.querySelector('#form-info').textContent='Wir prüfen euren Termin und die genaue Anfahrt. Eure Anfrage ist kostenlos und reserviert noch keine Fotobox. Bei Verfügbarkeit erhaltet ihr ein Angebot zum Onlineabschluss. Angaben zur Datenverarbeitung findet ihr im Datenschutz.';}}).catch(()=>{});
-form.addEventListener('submit', async event => {
-  event.preventDefault();
-  if (!form.reportValidity()) return;
-  const data = new FormData(form);
-  if(requestEnabled && data.get('delivery')!=='Individuelle Anfrage'){const button=document.querySelector('#request-button');button.disabled=true;try{const res=await fetch('/api/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:data.get('names'),email:data.get('email'),phone:data.get('phone'),date:data.get('date'),location:data.get('location'),customerType:data.get('customerType'),delivery:data.get('delivery')==='Selbstabholung'?'pickup':'delivery',message:data.get('message'),website:data.get('website')})});const result=await res.json();if(!res.ok)throw Error(result.error);document.querySelector('#form-status').textContent='Eure Anfrage ist eingegangen. Referenz: '+result.reference+'. Ihr bekommt eine Eingangsbestätigung per E-Mail. Wir prüfen jetzt Termin und Anfahrt.';form.reset();return;}catch(e){document.querySelector('#form-status').textContent=e.message+' Ihr könnt uns auch direkt anrufen oder eine E-Mail schreiben.';return;}finally{button.disabled=false;}}
-  const date = String(data.get('date')).split('-').reverse().join('.');
-  const subject = `Fotobox-Anfrage für den ${date} – ${data.get('location')}`;
-  const body = `Hallo Herzblende,\n\nwir möchten eine digitale Fotobox anfragen.\n\nNamen: ${data.get('names')}\nE-Mail: ${data.get('email')}\nDatum: ${date}\nOrt / Location: ${data.get('location')}\nÜbergabe: ${data.get('delivery')}\n${enquiryPriceText()}\n\n${data.get('message') || ''}\n\nBitte gebt uns Bescheid, ob unser Termin verfügbar ist, und bestätigt uns das vollständige Angebot.\n\nViele Grüße\n${data.get('names')}`;
-  document.querySelector('#email-copy').value = body;
-  document.querySelector('#email-fallback').hidden = false;
-  document.querySelector('#form-status').textContent = 'Eure Anfrage ist vorbereitet, aber noch nicht gesendet. Sendet sie in eurem E-Mail-Programm. Falls es sich nicht öffnet: Kopiert den Text unten und schickt ihn an uhighcauseidope@gmail.com oder über Instagram.';
-  window.location.href = `mailto:uhighcauseidope@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-});
-document.querySelector('#copy-request').addEventListener('click', async () => {
-  const text = document.querySelector('#email-copy');
-  try {
-    await navigator.clipboard.writeText(text.value);
-    document.querySelector('#form-status').textContent = 'Anfragetext kopiert. Ihr könnt ihn jetzt in eine E-Mail oder Instagram-Nachricht einfügen und selbst senden.';
-  } catch {
-    text.focus(); text.select();
-    document.querySelector('#form-status').textContent = 'Der Anfragetext ist markiert. Bitte kopiert ihn und sendet ihn per E-Mail oder Instagram.';
-  }
-});
+(() => {
+ const form=document.querySelector('#enquiry-form'),delivery=document.querySelector('#delivery'),distanceInput=document.querySelector('#distance'),useDistance=document.querySelector('#use-distance'),price=globalThis.fotoboxPricing;
+ const money=c=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(c/100),number=n=>new Intl.NumberFormat('de-DE',{maximumFractionDigits:20}).format(n);
+ const {Calendar,dayLabel}=globalThis.HerzblendeCalendar;
+ let selectedDistance=null,step=1,attemptId=null,attemptPayload=null,receiptURL=null,busy=false;
+ function currentDistance(){return distanceInput.value!==''&&distanceInput.validity.valid?distanceInput.valueAsNumber:null;}
+ function updateCalculator(){if(!distanceInput)return;const distance=currentDistance(),valid=distance!==null&&Number.isFinite(distance);distanceInput.setAttribute('aria-invalid',String(!valid));useDistance.setAttribute('aria-disabled',String(!valid));document.querySelector('#distance-error').textContent=valid?'':'Bitte gebt eine Entfernung von 0 bis 1.000 km ein.';if(!valid){document.querySelector('#travel-cost').textContent='—';document.querySelector('#total-cost').textContent='—';return;}const q=price.quote(distance);document.querySelector('#travel-cost').textContent=money(q.travelCents);document.querySelector('#total-cost').textContent=money(q.totalCents);document.querySelector('#travel-explainer').textContent=distance<=10?'Bis einschließlich 10 km einfacher Straßenentfernung sind alle vier Fahrstrecken inklusive.':`Eingegeben: ${number(distance)} km → berechnet: ${q.billedDistanceKm} km. (${q.billedDistanceKm} − 10) × 4 × 0,60 € = ${money(q.travelCents)} Fahrtkosten. Jeder zusätzliche 5-km-Schritt kostet insgesamt 12 € für Lieferung und Abholung.`;}
+ function estimate(){if(delivery.value==='custom')return 'Individuelle Anfrage: Umfang, Verfügbarkeit und Gesamtpreis stimmen wir persönlich ab.';if(delivery.value==='pickup')return 'Eine digitale Fotobox: 250,00 € bei Selbstabholung, ohne Fahrtkosten.';if(selectedDistance===null)return 'Eine digitale Fotobox: 250,00 €. Fahrtkosten nach vereinbarter Entfernung.';const q=price.quote(selectedDistance);return `${money(q.baseCents)} + ${money(q.travelCents)} Fahrtkosten = ${money(q.totalCents)} bei ${number(selectedDistance)} km einfacher Straßenentfernung, auf ${q.billedDistanceKm} km aufgerundet. Vorabrechnung; die Route stimmen wir vor der Buchung ab.`;}
+ function updateEstimate(){document.querySelector('#inquiry-estimate').textContent=estimate();}
+ distanceInput?.addEventListener('input',updateCalculator);delivery.addEventListener('change',updateEstimate);useDistance?.addEventListener('click',e=>{const distance=currentDistance();if(distance===null){e.preventDefault();distanceInput.reportValidity();return;}selectedDistance=distance;delivery.value='delivery';updateEstimate();});updateCalculator();updateEstimate();
+ function showStep(next,focus=true){step=next;document.querySelectorAll('[data-panel]').forEach(p=>p.hidden=Number(p.dataset.panel)!==next);document.querySelectorAll('[data-step]').forEach(s=>{if(Number(s.dataset.step)===next)s.setAttribute('aria-current','step');else s.removeAttribute('aria-current');s.classList.toggle('complete',Number(s.dataset.step)<next);});if(focus){const heading=document.querySelector(`[data-panel="${next}"] h3`);heading.tabIndex=-1;heading.focus({preventScroll:true});document.querySelector('.scheduler-content').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});}}
+ const calendar=new Calendar(document.querySelector('#event-calendar'),{fetchMonth:async month=>{const res=await fetch('/api/availability?month='+encodeURIComponent(month),{cache:'no-store'});if(!res.ok)throw Error('Kalender konnte nicht geladen werden.');return res.json();},onSelect:day=>{form.elements.date.value=day.date;document.querySelector('#selected-date strong').textContent=dayLabel(day.date);document.querySelector('#date-selection-info').textContent=day.status==='unknown'?'Euer Wunschtermin: '+dayLabel(day.date)+'. Verfügbarkeit wird geprüft.':dayLabel(day.date)+' · '+(day.available===1?'Eine Fotobox verfügbar.':'Zwei Fotoboxen verfügbar.');document.querySelector('#date-next').disabled=false;},onData:data=>{const selected=data.days.find(d=>d.date===form.elements.date.value);if(selected&&['unavailable','past','outside_range'].includes(selected.status)){form.elements.date.value='';calendar.select(null);document.querySelector('#date-next').disabled=true;document.querySelector('#date-selection-info').textContent='Dieser Tag ist nicht mehr verfügbar. Bitte wählt einen anderen Termin.';document.querySelector('#selected-date strong').textContent='Bitte neu auswählen';}}});
+ document.querySelector('#date-next').addEventListener('click',()=>{if(form.elements.date.value)showStep(2);});document.querySelectorAll('[data-back]').forEach(b=>b.addEventListener('click',()=>{if(!busy)showStep(Number(b.dataset.back));}));
+ function data(){const f=new FormData(form);return {name:String(f.get('names')).trim(),email:String(f.get('email')).trim(),phone:String(f.get('phone')||'').trim(),date:String(f.get('date')),location:String(f.get('location')).trim(),delivery:String(f.get('delivery')),customerType:String(f.get('customerType')),message:String(f.get('message')||'').trim(),website:String(f.get('website')||'')};}
+ function detailsNext(){if(!form.reportValidity())return;const d=data();if(!d.date){showStep(1);return;}const list=document.querySelector('#request-summary');list.replaceChildren();for(const [label,value]of [['Datum',dayLabel(d.date)],['Eure Namen',d.name],['Kontakt',d.email+(d.phone?' · '+d.phone:'')],['Location',d.location],['Übergabe',d.delivery==='pickup'?'Selbstabholung in Rendsburg':d.delivery==='custom'?'Individuelle Anfrage':'Lieferung & Abholung'],['Preis',estimate()],...(d.message?[['Eure Wünsche',d.message]]:[])]){const row=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;row.append(dt,dd);list.append(row);}document.querySelector('#form-status').textContent='';showStep(3);}
+ document.querySelector('#details-next').addEventListener('click',detailsNext);
+ form.addEventListener('submit',async e=>{e.preventDefault();if(busy)return;if(step!==3){if(step===2)detailsNext();return;}const payload=data();if(!payload.date){showStep(1);return;}const fingerprint=JSON.stringify(payload);if(fingerprint!==attemptPayload){attemptPayload=fingerprint;attemptId=crypto.randomUUID();}busy=true;document.querySelectorAll('.scheduler-actions button').forEach(b=>b.disabled=true);const status=document.querySelector('#form-status');status.textContent='Eure Anfrage wird gespeichert …';try{const res=await fetch('/api/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,requestId:attemptId})});const result=await res.json();if(!res.ok)throw Error(result.error||'Bitte versucht es erneut.');if(!result.reference||!result.receiptText)throw Error('Bitte prüft eure Angaben und versucht es erneut.');document.querySelector('#request-success').textContent=`Eure Anfrage für ${dayLabel(payload.date)} ist bei uns gespeichert. Eure Referenz: ${result.reference}.`;document.querySelector('#request-email-status').textContent=result.emailQueued?'Eine zusätzliche Eingangsbestätigung wird per E-Mail versandt.':'Ladet die Eingangsbestätigung mit eurer Referenz herunter. Wir melden uns über eure angegebenen Kontaktdaten.';if(receiptURL)URL.revokeObjectURL(receiptURL);receiptURL=URL.createObjectURL(new Blob([result.receiptText],{type:'text/plain;charset=utf-8'}));document.querySelector('#request-receipt').href=receiptURL;showStep(4);}catch(error){status.textContent=error.message==='Failed to fetch'?'Das Ergebnis konnte gerade nicht abgerufen werden. Bitte sendet erneut; dieselbe Anfrage wird dabei nicht doppelt angelegt.':error.message||'Die Anfrage konnte gerade nicht übermittelt werden. Bitte erneut versuchen.';}finally{busy=false;document.querySelectorAll('.scheduler-actions button').forEach(b=>b.disabled=false);}});
+ document.querySelector('#new-request').addEventListener('click',()=>{form.reset();attemptId=null;attemptPayload=null;calendar.select(null);calendar.load();document.querySelector('#selected-date strong').textContent='Noch kein Datum gewählt';document.querySelector('#date-selection-info').textContent='Wählt einen Tag im Kalender aus.';document.querySelector('#date-next').disabled=true;updateEstimate();showStep(1);});
+})();
