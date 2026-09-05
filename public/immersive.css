@@ -49,3 +49,31 @@
 @media(max-width:760px){.product-note{display:block;bottom:56px}}
 @media(max-width:760px){.new-brand{font-size:1.65rem;letter-spacing:-1px}.new-brand .brand-location{font-size:.6rem;letter-spacing:2.7px}.new-header nav{gap:10px}}
 @media(prefers-reduced-motion:reduce){.product-figure{position:relative;inset:auto;height:75svh;max-height:750px;transform:none;opacity:1}.product-figure img{mix-blend-mode:normal}.product-note{display:block;position:relative;inset:auto;transform:none;text-align:center;white-space:normal;margin:18px auto 30px}.location-grid{scroll-behavior:auto}}
+
+/* Warm daylight palette: the same layout and scroll choreography, on lighter surfaces. */
+:root{--daylight:#f7f1e8;--sand:#e8dfd1;--day-ink:#332a27;--day-muted:#695b52;--champagne:#9a6d51}
+.home-page{background:var(--daylight)}
+.new-header{background:var(--daylight);color:var(--wine);border-bottom:1px solid #dfd3c5}
+.pill.light{background:var(--wine);color:#fff;border-color:var(--wine)}
+.product-story{background:var(--daylight);color:var(--day-ink)}
+.overline{color:var(--day-muted)}
+.story-intro h1 span{color:var(--wine)}
+.story-panel>p:not(.overline){color:var(--day-muted)}
+.story-bottom,.scroll-hint,.product-note{color:var(--day-muted)}
+.story-progress i{background:#d5c7b6}
+.story-progress i:after{background:var(--wine)}
+.product-figure img{mix-blend-mode:normal}
+.intro-section,.pricing,.faq,.footer{background:#fffdf9}
+.flow,.regions{background:var(--daylight)}
+.contact{background:#f0e6d9}
+.location-section{background:var(--sand);color:var(--day-ink)}
+.location-heading .eyebrow,.location-heading h2 em{color:var(--wine)}
+.location-heading>p,.visualization-note,.location-grid figcaption span,.location-bottom p{color:var(--day-muted)}
+.location-bottom{border-top-color:#cabcaa}
+.price-card.featured{background:#efe3d5;color:var(--day-ink);border-color:#d9c7b3}
+.price-card.featured .eyebrow{color:var(--wine)}
+.price-card.featured .card-desc,.price-card.featured .card-fineprint{color:var(--day-muted)}
+.featured .button{background:var(--wine);color:#fff;border-color:var(--wine)}
+.featured .button:hover{background:var(--wine-dark)}
+@media(max-width:760px){.story-panel{background:linear-gradient(180deg,rgba(247,241,232,0),#f7f1e8 22%)}}
+@media(prefers-reduced-motion:reduce){.story-panel{background:none}.product-figure img{mix-blend-mode:normal}}
