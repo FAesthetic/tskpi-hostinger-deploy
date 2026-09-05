@@ -75,12 +75,12 @@ function confirmationCount(store, booking) {
   return store.db.prepare('SELECT COUNT(*) AS count FROM outbox WHERE id=?').get(`confirmation-${booking.id}`).count;
 }
 
-test('pricing includes 10 km and charges four trips for the excess distance', () => {
+test('pricing includes 10 km and rounds the one-way distance up to five km', () => {
   assert.deepEqual(priceFor(25_000, 0, 'delivery'), { baseCents: 25_000, travelCents: 0, totalCents: 25_000 });
   assert.deepEqual(priceFor(25_000, 10, 'delivery'), { baseCents: 25_000, travelCents: 0, totalCents: 25_000 });
   assert.deepEqual(priceFor(25_000, 20, 'delivery'), { baseCents: 25_000, travelCents: 2_400, totalCents: 27_400 });
-  assert.equal(priceFor(25_000, 10.25, 'delivery').travelCents, 60);
-  assert.equal(priceFor(25_000, 10.123, 'delivery').travelCents, 30);
+  assert.equal(priceFor(25_000, 10.25, 'delivery').travelCents, 1200);
+  assert.equal(priceFor(25_000, 10.123, 'delivery').travelCents, 1200);
   assert.equal(priceFor(25_000, 200, 'pickup').totalCents, 25_000);
 });
 

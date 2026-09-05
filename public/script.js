@@ -5,7 +5,7 @@ const distanceInput = document.querySelector('#distance');
 const useDistance = document.querySelector('#use-distance');
 const price = globalThis.fotoboxPricing;
 const money = cents => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
-const number = value => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 }).format(value);
+const number = value => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 20 }).format(value);
 let selectedDistance = null;
 function currentDistance() {
   return distanceInput.value !== '' && distanceInput.validity.valid ? distanceInput.valueAsNumber : null;
@@ -15,7 +15,7 @@ function updateCalculator() {
   const valid = distance !== null && Number.isFinite(distance);
   distanceInput.setAttribute('aria-invalid', String(!valid));
   useDistance.setAttribute('aria-disabled', String(!valid));
-  document.querySelector('#distance-error').textContent = valid ? '' : 'Bitte gebt eine Entfernung von 0 bis 1.000 km mit höchstens einer Nachkommastelle ein.';
+  document.querySelector('#distance-error').textContent = valid ? '' : 'Bitte gebt eine Entfernung von 0 bis 1.000 km ein.';
   if (!valid) {
     document.querySelector('#travel-cost').textContent = '—';
     document.querySelector('#total-cost').textContent = '—';
@@ -27,14 +27,14 @@ function updateCalculator() {
   document.querySelector('#total-cost').textContent = money(quote.totalCents);
   document.querySelector('#travel-explainer').textContent = distance <= 10
     ? 'Bis einschließlich 10 km einfacher Straßenentfernung sind alle vier Fahrstrecken inklusive.'
-    : `Bei ${number(distance)} km Entfernung: (${number(distance)} − 10) × 4 × 0,60 € = ${money(quote.travelCents)} Fahrtkosten. Vier Strecken entstehen durch Lieferung und Abholung, jeweils hin und zurück.`;
+    : `Eingegeben: ${number(distance)} km → berechnet: ${quote.billedDistanceKm} km. (${quote.billedDistanceKm} − 10) × 4 × 0,60 € = ${money(quote.travelCents)} Fahrtkosten. Jeder zusätzliche 5-km-Schritt kostet insgesamt 12 € für Lieferung und Abholung.`;
 }
 function enquiryPriceText() {
   if (delivery.value === 'Individuelle Anfrage') return 'Individuelle Anfrage: Umfang, Verfügbarkeit und Gesamtpreis bitte persönlich abstimmen.';
   if (delivery.value === 'Selbstabholung') return 'Eine digitale Fotobox: 250,00 € bei Selbstabholung, ohne Fahrtkosten.';
   if (selectedDistance === null) return 'Eine digitale Fotobox: 250,00 €. Fahrtkosten nach vereinbarter Entfernung.';
   const quote = price.quote(selectedDistance);
-  return `Eine digitale Fotobox: ${money(quote.baseCents)} + ${money(quote.travelCents)} Fahrtkosten = ${money(quote.totalCents)} bei ${number(selectedDistance)} km einfacher Straßenentfernung. Vorabrechnung; die Route stimmen wir vor der Buchung ab.`;
+  return `Eine digitale Fotobox: ${money(quote.baseCents)} + ${money(quote.travelCents)} Fahrtkosten = ${money(quote.totalCents)} bei ${number(selectedDistance)} km einfacher Straßenentfernung, auf ${quote.billedDistanceKm} km aufgerundet. Vorabrechnung; die Route stimmen wir vor der Buchung ab.`;
 }
 function updateEnquiry() { document.querySelector('#inquiry-estimate').textContent = enquiryPriceText(); }
 distanceInput.addEventListener('input', updateCalculator);
