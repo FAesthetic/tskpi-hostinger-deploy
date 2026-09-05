@@ -6,7 +6,7 @@
       "command": [
         "/bin/sh",
         "-c",
-        "set -eu; mkdir -p /opt/dienstleister; wget -q -T 45 -O /tmp/site.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/07997ce2317e2d52daa2e02241b7e74122a5ac36; tar xzf /tmp/site.tar.gz -C /opt/dienstleister --strip-components=1; rm /tmp/site.tar.gz; exec nginx -c /opt/dienstleister/nginx.conf -g \"daemon off;\""
+        "set -eu; mkdir -p /opt/dienstleister; wget -q -T 45 -O /tmp/site.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/83f0db80804f5fcb5b8f8c1617b7627f5f7dd969; tar xzf /tmp/site.tar.gz -C /opt/dienstleister --strip-components=1; rm /tmp/site.tar.gz; exec nginx -c /opt/dienstleister/nginx.conf -g \"daemon off;\""
       ],
       "networks": [
         "web"
