@@ -42,8 +42,9 @@ export async function renderBookingPdf(kind, booking, options = {}) {
   const b = booking, owner = { ...OWNER, ...options.owner };
   const statusLabel = sanitize(options.subtitle || (kind === 'offer' && options.offerLabel) || STATUS[kind]);
   const ref = sanitize(b.reference || 'Ohne Referenz');
+  const extra = b.extension_cents || 0;
   const base = isCents(b.base_cents) ? b.base_cents : (isCents(options.baseCents) ? options.baseCents : 25000);
-  if (kind !== 'inquiry' && (![b.base_cents, b.travel_cents, b.total_cents].every(isCents) || b.base_cents + b.travel_cents !== b.total_cents)) {
+  if (kind !== 'inquiry' && (![b.base_cents, b.travel_cents, b.total_cents].every(isCents) || b.base_cents + b.travel_cents + (b.extension_cents || 0) !== b.total_cents)) {
     throw new TypeError('Offer/confirmation requires consistent integer cent amounts');
   }
   const paid = kind === 'confirmation' && (options.paymentConfirmed ?? (b.status === 'confirmed')) === true;
@@ -148,15 +149,17 @@ export async function renderBookingPdf(kind, booking, options = {}) {
   heading('Eure Veranstaltung');
   const delivery = b.delivery === 'pickup' ? 'Selbstabholung in Rendsburg' : b.delivery === 'custom' ? 'Individuelle Übergabe - wird abgestimmt' : 'Lieferung, Aufbau & Abholung';
   smallFieldPair('Termin', date(b.event_date), 'Übergabe', delivery);
+  if(b.extension_days===1)field('Mietdauer', 'Bis zu 24 Stunden plus vereinbarte Verlängerung um bis zu weitere 24 Stunden');
   field('Veranstaltungsort', b.location);
   field('Für euch', [b.name, b.email, b.phone].filter(Boolean).map(sanitize).join('\n'));
 
   heading(kind === 'inquiry' ? 'Preisrahmen' : 'Leistungen & Preis');
-  if(kind==='inquiry'&&b.delivery==='custom'){text('Individuelle Anfrage: Umfang, Verfügbarkeit und Gesamtpreis stimmen wir persönlich mit euch ab. Das Standardpaket von 250 € gilt für eine digitale Fotobox bis zu 24 Stunden.');}else{
-  const exact = kind !== 'inquiry' || (b.delivery !== 'custom' && (b.delivery === 'pickup' || isDistance(b.distance)) && [b.base_cents, b.travel_cents, b.total_cents].every(isCents) && b.base_cents + b.travel_cents === b.total_cents);
-  ensure(exact ? 112 : 87);
-  doc.roundedRect(left, y - 5, width, exact ? 98 : 72, 3).fill('#f0e9e1'); y += 9;
+  if(kind==='inquiry'&&b.delivery==='custom'){text(b.pricing_version==='2026-09-06-v4'?'Individuelle Anfrage: Umfang, Verfügbarkeit und Gesamtpreis stimmen wir persönlich mit euch ab. Selbstabholung ab 199 €, Lieferung und Aufbau ab 249 € für bis zu 24 Stunden.':'Individuelle Anfrage: Umfang, Verfügbarkeit und Gesamtpreis stimmen wir persönlich mit euch ab. Das Standardpaket von 250 € gilt für eine digitale Fotobox bis zu 24 Stunden.');}else{
+  const exact = kind !== 'inquiry' || (b.delivery !== 'custom' && (b.delivery === 'pickup' || isDistance(b.distance)) && [b.base_cents, b.travel_cents, b.total_cents].every(isCents) && b.base_cents + b.travel_cents + (b.extension_cents || 0) === b.total_cents);
+  ensure((exact ? 112 : 87)+(extra?25:0));
+  doc.roundedRect(left, y - 5, width, (exact ? 98 : 72)+(extra?25:0), 3).fill('#f0e9e1'); y += 9;
   priceRow('Eine digitale Fotobox · bis zu 24 Stunden', money(base));
+  if(extra)priceRow('Verlängerung · bis zu weitere 24 Stunden',money(extra));
   if (exact) { priceRow('Vereinbarte Fahrtkosten', money(b.travel_cents)); priceRow(kind === 'inquiry' ? 'Unverbindliche Kostenschätzung' : 'Gesamtbetrag', money(b.total_cents), true); }
   else { fixed('zzgl. abgestimmter Fahrtkosten', left + 15, y, { size: 9.5, color: MUTED, available: 440 }); y += 38; }
   y += 7;
@@ -166,7 +169,7 @@ export async function renderBookingPdf(kind, booking, options = {}) {
     const billed = isDistance(b.billed_distance) ? `, auf ${km(b.billed_distance)} km aufgerundet` : '';
     text(`Fahrtbasis: ${km(b.distance)} km einfache Straßenentfernung${billed}. Vier Strecken für Lieferung und Abholung; je Strecke sind die ersten 10 km frei.`, { size: 8.2, color: MUTED, lineHeight: 12.5, after: 9 });
   }
-  text(options.serviceText || 'Digitale Fotos · Kamera mit Livebild & Fernauslöser · keine Sofortausdrucke. Die Fotos werden nach der Veranstaltung manuell in euren eigenen Google-Drive-Ordner übertragen. Übergabezeiten stimmen wir persönlich ab.', { size: 8.3, color: MUTED, lineHeight: 12.5, after: 6 });
+  text(options.serviceText || (b.pricing_version==='2026-09-06-v4'?'Kamera, Livebild, Fernauslöser, vorhandenes Licht und Zubehör, Fotobox-Spiel und digitale Fotoübergabe über einen eigenen Google-Drive-Ordner. Keine Sofortausdrucke. '+(b.delivery==='pickup'?'Selbstabholung und Rückgabe in Rendsburg nach Prüfung von sicherem Transport und Bedienbarkeit. Einweisung bei Übergabe.':'Lieferung, Aufbau, Einweisung und Abholung. '):'Digitale Fotos · Kamera mit Livebild & Fernauslöser · keine Sofortausdrucke. Die Fotos werden nach der Veranstaltung manuell in euren eigenen Google-Drive-Ordner übertragen. Übergabezeiten stimmen wir persönlich ab.'), { size: 8.3, color: MUTED, lineHeight: 12.5, after: 6 });
   if (kind === 'offer') {
     heading('Gültigkeit & Buchung');
     text(`Gültig bis ${date(b.quote_until, true)}.`, { font: 'Strong', size: 9.6, lineHeight: 14, after: 5 });

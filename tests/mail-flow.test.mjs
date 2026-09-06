@@ -14,7 +14,7 @@ const PASSWORD = 'MUSTER-local-only-password-42';
 const ORIGIN = 'http://localhost';
 const smtpConfig = { smtpHost: 'smtp.example.invalid', smtpPort: 465, smtpUser: 'sender@example.invalid', smtpPassword: 'MUSTER-fake-only' };
 
-async function fixture(t) {
+async function fixture(t, { initialBaseCents = 24900 } = {}) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'fotobox-mail-flow-'));
   const messages = [], sendAttempts = [];
   let app, server, base, cookie = '', csrf = '', verifies = 0, failuresRemaining = 0;
@@ -26,7 +26,7 @@ async function fixture(t) {
       messages.push(mail); return { messageId: mail.messageId || 'test-mail' };
     },
   });
-  const boot = async (baseCents = 25000) => {
+  const boot = async (baseCents = initialBaseCents) => {
     app = createApp({ directory, origin: ORIGIN, baseCents, bootstrapHash: passwordHash(PASSWORD), transportFactory, stripeFactory: () => { throw Error('Unexpected Stripe call in a mail-only test'); }, startWorkers: false });
     server = http.createServer(app.handler);
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -164,7 +164,7 @@ test('outbox waits for a received test mail; mail-confirm preserves payment and 
   assert.equal(f.messages.length, 3, 'Repeated reception confirmation must not duplicate request notifications');
 });
 
-test('offer preview requires authentication and CSRF, prices 12.3 km at EUR 262, and reserves no box', async t => {
+test('offer preview requires authentication and CSRF, prices 12.3 km at EUR 261, and reserves no box', async t => {
   const f = await fixture(t);
   const { booking } = await f.submit();
   assert.equal((await f.call('admin/offer-preview', { id: booking.id, distanceKm: 12.3 })).status, 401);
@@ -175,18 +175,19 @@ test('offer preview requires authentication and CSRF, prices 12.3 km at EUR 262,
   const preview = await f.call('admin/offer-preview', { id: booking.id, distanceKm: 12.3 });
   assert.equal(preview.status, 200);
   assertPdf(preview);
-  assert.equal(preview.body.totalCents, 26200);
+  assert.equal(preview.body.totalCents, 26100);
   const record = f.store.db.prepare('SELECT * FROM email_offers WHERE id=?').get(preview.body.previewId);
   const snapshot = JSON.parse(record.snapshot);
   assert.equal(snapshot.booking.distance, 12.3);
   assert.equal(snapshot.booking.billed_distance, 15);
-  assert.equal(snapshot.booking.base_cents, 25000);
+  assert.equal(snapshot.booking.base_cents, 24900);
   assert.equal(snapshot.booking.travel_cents, 1200);
-  assert.equal(snapshot.booking.total_cents, 26200);
+  assert.equal(snapshot.booking.extension_cents, 0);
+  assert.equal(snapshot.booking.total_cents, 26100);
   assert.match(snapshot.options.acceptanceText, /reserviert keine Fotobox/);
   assert.equal(f.store.booking(booking.id).status, 'requested');
   assert.equal(f.store.booking(booking.id).unit, null);
-  assert.deepEqual(f.store.available(booking.event_date, booking.end_date), [1, 2]);
+  assert.deepEqual(f.store.available(booking.event_date, booking.end_date), [1]);
   assert.equal((await f.call('admin/email-offer', { previewId: preview.body.previewId })).status, 400);
   assert.equal(f.store.db.prepare('SELECT COUNT(*) n FROM outbox WHERE id=?').get('offer-' + preview.body.previewId).n, 0);
 });
@@ -213,8 +214,8 @@ test('offer snapshot survives a base-price restart and the same preview sends on
   await f.drain();
   const jobs = f.store.db.prepare('SELECT * FROM outbox WHERE id=?').all('offer-' + previewId);
   assert.equal(jobs.length, 1);
-  assert.equal(JSON.parse(jobs[0].pdf_payload).booking.total_cents, 26200);
-  assert.match(jobs[0].body.replace(/\u00a0/g, ' '), /Gesamt: 262,00 €/);
+  assert.equal(JSON.parse(jobs[0].pdf_payload).booking.total_cents, 26100);
+  assert.match(jobs[0].body.replace(/\u00a0/g, ' '), /Gesamt: 261,00 €/);
   assert.match(jobs[0].body, /reserviert keine Fotobox/);
   const actual = f.messages.filter(mail => mail.messageId === `<offer-${previewId}@localhost>`);
   assert.equal(actual.length, 1);
@@ -223,7 +224,7 @@ test('offer snapshot survives a base-price restart and the same preview sends on
   assert.equal(pdf.content.subarray(0, 5).toString(), '%PDF-');
   assert.equal(f.store.booking(booking.id).status, 'requested');
   assert.equal(f.store.booking(booking.id).unit, null);
-  assert.deepEqual(f.store.available(booking.event_date, booking.end_date), [1, 2]);
+  assert.deepEqual(f.store.available(booking.event_date, booking.end_date), [1]);
   assert.deepEqual(unrelatedFlags(f), beforeFlags);
   assert.equal((await f.call('admin/email-offer', { previewId })).status, 200);
   await f.drain();
@@ -314,7 +315,9 @@ test('a queued offer expiring during an SMTP outage is not sent and reports expi
 });
 
 test('inquiry price snapshots stay at EUR 250 through restart, replay and delayed email after a price change', async t => {
-  const f = await fixture(t);
+  // Explicitly boot the historical price; never reinterpret this saved inquiry
+  // as today's EUR 249 delivery package when testing migration/replay.
+  const f = await fixture(t, { initialBaseCents: 25000 });
   const original = await f.submit();
   const before = requestJobs(f, original.booking.id);
   assert.ok(before.every(job => JSON.parse(job.pdf_payload).booking.base_cents === 25000));

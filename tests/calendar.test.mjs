@@ -95,7 +95,7 @@ test('from API clamps at the inclusive 540-day horizon and month cells outside i
   const from = await call(`availability?from=${max}`);
   assert.equal(from.status, 200);
   assert.deepEqual(from.body.days.map(day => day.date), [max]);
-  assert.equal(dayIn(from, max).available, 2);
+  assert.equal(dayIn(from, max).available, 1);
   assert.equal((await call(`availability?from=${plusDays(max, 1)}`)).status, 400);
   assert.equal((await call(`availability?from=${plusDays(today(), -1)}`)).status, 400);
   const month = await call(`availability?month=${monthOf(max)}`);
@@ -114,20 +114,20 @@ test('invalid calendar query dates and months return a validation error', async 
   }
 });
 
-test('two physical boxes remain occupied through next-day pickup and free on day two', async t => {
+test('the single physical box remains occupied through next-day pickup and is free on day two', async t => {
   const { call, store } = await fixture(t);
   store.set('calendar_reviewed', true);
   const date = plusDays(today(), 45), end = plusDays(date, 2);
-  store.addBlock(1, date, end, 'Box 1: Feier plus Rückgabe');
   let response = await call(`availability?from=${date}`);
   assert.equal(dayIn(response, date).available, 1);
   assert.equal(dayIn(response, plusDays(date, 1)).available, 1);
-  store.addBlock(2, date, end, 'Box 2: Feier plus Rückgabe');
+  store.addBlock(1, date, end, 'Fotobox: Feier plus Rückgabe');
+  assert.throws(() => store.addBlock(1, date, end, 'Doppelte Reservierung'));
   response = await call(`availability?from=${date}`);
   assert.equal(dayIn(response, date).available, 0);
   assert.equal(dayIn(response, date).status, 'unavailable');
   assert.equal(dayIn(response, plusDays(date, 1)).available, 0);
-  assert.equal(dayIn(response, end).available, 2);
+  assert.equal(dayIn(response, end).available, 1);
   assert.equal(dayIn(response, end).status, 'available');
 });
 
@@ -194,7 +194,7 @@ test('a successful retry remains the same receipt even after the calendar become
   const data = payload(), first = await call('request', data);
   assert.equal(first.status, 200);
   store.addBlock(1, data.date, plusDays(data.date, 2), 'Neu belegt');
-  store.addBlock(2, data.date, plusDays(data.date, 2), 'Neu belegt');
+  assert.equal(store.available(data.date, plusDays(data.date, 2)).length, 0);
   const retry = await call('request', data);
   assert.equal(retry.status, 200);
   assert.equal(retry.body.reference, first.body.reference);
@@ -205,9 +205,9 @@ test('submission rejects a date taken since availability was shown', async t => 
   store.set('calendar_reviewed', true);
   const data = payload();
   const before = await call(`availability?from=${data.date}`);
-  assert.equal(dayIn(before, data.date).available, 2);
+  assert.equal(dayIn(before, data.date).available, 1);
   store.addBlock(1, data.date, plusDays(data.date, 2), 'Belegt');
-  store.addBlock(2, data.date, plusDays(data.date, 2), 'Belegt');
+  assert.equal(store.available(data.date, plusDays(data.date, 2)).length, 0);
   assert.equal((await call('request', data)).status, 409);
   assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM bookings').get().count, 0);
 });
@@ -249,7 +249,11 @@ test('owner calendar finds an older confirmed booking behind more than 300 newer
   const booking = store.createRequest(data);
   store.db.prepare("UPDATE bookings SET status='confirmed',unit=1,created=0 WHERE id=?").run(booking.id);
   for (let index = 0; index < 305; index++) store.createRequest({ ...data, date: plusDays(date, 60), name: `Neuere Anfrage ${index}` });
-  const blockId = store.addBlock(2, date, plusDays(date, 2), 'Manuelle Bestandssperre');
+  // The same month can contain both an older paid booking and a separate manual
+  // block, but one physical box cannot hold both over the same interval.
+  const blockDate = Number(date.slice(-2)) <= monthLength(monthOf(date)) - 4
+    ? plusDays(date, 3) : plusDays(date, -3);
+  const blockId = store.addBlock(1, blockDate, plusDays(blockDate, 2), 'Manuelle Bestandssperre');
   await login();
   const response = await call(`admin/calendar?month=${monthOf(date)}`);
   assert.equal(response.status, 200);
@@ -257,5 +261,6 @@ test('owner calendar finds an older confirmed booking behind more than 300 newer
   assert.deepEqual(dayIn(response, date).units, []);
   assert.ok(response.body.events.some(event => event.id === booking.id), 'Month query must include older overlapping bookings.');
   assert.ok(response.body.blocks.some(block => block.id === blockId));
+  assert.equal(dayIn(response, blockDate).available, 0);
   assert.equal(response.body.events.some(event => event.name === 'Neuere Anfrage 304'), false, 'A month query must not include unrelated future events.');
 });

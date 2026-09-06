@@ -7,7 +7,7 @@ import { createStore, priceFor, plusDays, today } from '../server/core.mjs';
 
 // HTTP integration requirements for the separate API test suite:
 // 1. Concurrent POST /api/checkout calls for one offer create one payable Stripe
-//    session and return that same session. A third overlapping quote is rejected.
+//    session and return that same session. Every other overlapping quote is rejected.
 // 2. A timeout before Stripe creates a session can recover on retry. A timeout or
 //    process restart after creation but before local persistence finds the same
 //    session using unchanged saved parameters and the same idempotency key.
@@ -54,6 +54,8 @@ function fixture(t) {
 function checkoutFixture(t) {
   const f = fixture(t);
   let booking = f.request();
+  // Explicit price override keeps existing contract/idempotency cases independent
+  // of the current public package price.
   f.store.quote(booking.id, 20, 25_000);
   booking = f.store.startCheckout(booking.id);
   const sessionId = `cs_test_${booking.id}`;
@@ -76,12 +78,14 @@ function confirmationCount(store, booking) {
 }
 
 test('pricing includes 10 km and rounds the one-way distance up to five km', () => {
-  assert.deepEqual(priceFor(25_000, 0, 'delivery'), { baseCents: 25_000, travelCents: 0, totalCents: 25_000 });
-  assert.deepEqual(priceFor(25_000, 10, 'delivery'), { baseCents: 25_000, travelCents: 0, totalCents: 25_000 });
-  assert.deepEqual(priceFor(25_000, 20, 'delivery'), { baseCents: 25_000, travelCents: 2_400, totalCents: 27_400 });
-  assert.equal(priceFor(25_000, 10.25, 'delivery').travelCents, 1200);
-  assert.equal(priceFor(25_000, 10.123, 'delivery').travelCents, 1200);
-  assert.equal(priceFor(25_000, 200, 'pickup').totalCents, 25_000);
+  assert.deepEqual(priceFor(24_900, 0, 'delivery'), { baseCents: 24_900, travelCents: 0, extensionCents: 0, totalCents: 24_900 });
+  assert.deepEqual(priceFor(24_900, 10, 'delivery'), { baseCents: 24_900, travelCents: 0, extensionCents: 0, totalCents: 24_900 });
+  assert.deepEqual(priceFor(24_900, 20, 'delivery'), { baseCents: 24_900, travelCents: 2_400, extensionCents: 0, totalCents: 27_300 });
+  assert.equal(priceFor(24_900, 10.25, 'delivery').travelCents, 1200);
+  assert.equal(priceFor(24_900, 10.123, 'delivery').travelCents, 1200);
+  assert.deepEqual(priceFor(19_900, 200, 'pickup'), { baseCents: 19_900, travelCents: 0, extensionCents: 0, totalCents: 19_900 });
+  assert.equal(priceFor(19_900, 200, 'pickup', 1).totalCents, 24_800);
+  assert.equal(priceFor(24_900, 20, 'delivery', 1).totalCents, 32_200);
 });
 
 test('pricing rejects invalid base prices and non-finite or out-of-range distances', () => {
@@ -93,28 +97,45 @@ test('pricing rejects invalid base prices and non-finite or out-of-range distanc
   }
 });
 
-test('two overlapping quotes use separate physical boxes; the third cannot reserve', t => {
+test('one physical box permits one overlapping quote; all additional reservations are rejected', t => {
   const { store, request } = fixture(t);
   const requests = [request(), request(), request()];
-  const first = store.quote(requests[0].id, 20, 25_000);
-  const second = store.quote(requests[1].id, 20, 25_000);
-  assert.deepEqual(new Set([first.unit, second.unit]), new Set([1, 2]));
-  assert.throws(() => store.quote(requests[2].id, 20, 25_000));
-  assert.equal(store.booking(requests[2].id).status, 'requested');
-  assert.equal(store.booking(requests[2].id).unit, null);
+  const first = store.quote(requests[0].id, 20, 24_900);
+  assert.equal(first.unit, 1);
+  for (const additional of requests.slice(1)) {
+    assert.throws(() => store.quote(additional.id, 20, 24_900));
+    assert.equal(store.booking(additional.id).status, 'requested');
+    assert.equal(store.booking(additional.id).unit, null);
+  }
   assert.deepEqual(store.available(first.event_date, first.end_date), []);
   assert.deepEqual(store.available(plusDays(first.event_date, 1), plusDays(first.event_date, 3)), []);
-  assert.deepEqual(store.available(first.end_date, plusDays(first.end_date, 2)), [1, 2]);
+  assert.deepEqual(store.available(first.end_date, plusDays(first.end_date, 2)), [1]);
 });
 
 test('manual calendar blocks and paid bookings cannot be overwritten by another reservation', t => {
   const { store, request } = fixture(t);
   const b = request();
-  store.addBlock(1, b.event_date, b.end_date, 'Existing offline booking');
-  const quoted = store.quote(b.id, 20, 25_000);
-  assert.equal(quoted.unit, 2);
-  assert.throws(() => store.addBlock(2, b.event_date, b.end_date, 'Conflict'));
-  assert.throws(() => store.quote(request().id, 20, 25_000));
+  const blockId = store.addBlock(1, b.event_date, b.end_date, 'Existing offline booking');
+  assert.throws(() => store.quote(b.id, 20, 24_900));
+  assert.equal(store.booking(b.id).status, 'requested');
+  assert.equal(store.booking(b.id).unit, null);
+  assert.throws(() => store.addBlock(1, b.event_date, b.end_date, 'Conflict'));
+
+  // A non-overlapping booking may proceed; once paid it prevents both a second
+  // quote and an offline block, while the original manual block stays intact.
+  const paidRequest = request({ date: b.end_date });
+  store.quote(paidRequest.id, 20, 24_900);
+  const checkout = store.startCheckout(paidRequest.id);
+  const sessionId = 'cs_test_' + checkout.id;
+  store.db.prepare('UPDATE bookings SET session_id=? WHERE id=?').run(sessionId, checkout.id);
+  store.applySession({ id: sessionId, metadata: { booking_id: checkout.id }, currency: 'eur', amount_total: checkout.total_cents, payment_status: 'paid', status: 'complete', payment_intent: 'pi_test_' + checkout.id }, { confirmationText });
+  const paid = store.booking(checkout.id);
+  assert.equal(paid.status, 'confirmed');
+  assert.equal(paid.unit, 1);
+  assert.throws(() => store.addBlock(1, paid.event_date, paid.end_date, 'Paid booking conflict'));
+  assert.throws(() => store.quote(request({ date: paid.event_date }).id, 20, 24_900));
+  assert.ok(store.db.prepare('SELECT id FROM blocks WHERE id=?').get(blockId));
+  assert.equal(store.booking(paid.id).status, 'confirmed');
 });
 
 test('quote and checkout states retain capacity throughout unresolved payment processing', t => {
