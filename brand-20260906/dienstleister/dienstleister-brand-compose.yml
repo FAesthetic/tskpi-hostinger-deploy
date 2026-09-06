@@ -1,0 +1,48 @@
+services:
+  site:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    command:
+    - /bin/sh
+    - -c
+    - set -eu; mkdir -p /opt/dienstleister; wget -q -T 45 -O /tmp/site.tar.gz https://raw.githubusercontent.com/FAesthetic/tskpi-hostinger-deploy/b3be4f91d93aa9d51ca5817f09175bd0a56ec103/brand-20260906/dienstleister/site.tar.gz;
+      echo "ec61da3d6aad36e99e0a21c949027874995b0a5fba060ee22b99a8a4a967f10c  /tmp/site.tar.gz"
+      | sha256sum -c -; tar xzf /tmp/site.tar.gz -C /opt/dienstleister --strip-components=1;
+      rm /tmp/site.tar.gz; exec nginx -c /opt/dienstleister/nginx.conf -g "daemon
+      off;"
+    networks:
+    - web
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: web
+      traefik.http.routers.dienstleister-route.rule: Host(`dienstleister.bierlich.cloud`)
+      traefik.http.routers.dienstleister-route.entrypoints: websecure
+      traefik.http.routers.dienstleister-route.tls: 'true'
+      traefik.http.routers.dienstleister-route.tls.certresolver: le
+      traefik.http.routers.dienstleister-route.service: dienstleister-service
+      traefik.http.routers.dienstleister-http.rule: Host(`dienstleister.bierlich.cloud`)
+      traefik.http.routers.dienstleister-http.entrypoints: web
+      traefik.http.routers.dienstleister-http.middlewares: dienstleister-https
+      traefik.http.routers.dienstleister-http.service: dienstleister-service
+      traefik.http.middlewares.dienstleister-https.redirectscheme.scheme: https
+      traefik.http.middlewares.dienstleister-https.redirectscheme.permanent: 'true'
+      traefik.http.services.dienstleister-service.loadbalancer.server.port: '8080'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://127.0.0.1:8080/
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+networks:
+  web:
+    external: true
