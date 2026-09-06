@@ -1,0 +1,84 @@
+services:
+  site:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    command:
+    - /bin/sh
+    - -c
+    - set -eu; mkdir -p /opt/fotobox; wget -q -T 45 -O /tmp/fotobox.tar.gz https://raw.githubusercontent.com/FAesthetic/tskpi-hostinger-deploy/cee0ef4712e233a58c8ffd9ae6a67ab67e316326/brand-20260906/fotobox/site.tar.gz;
+      echo "13b36aeb827a96689dd1e6d88f71cea12d7137fac9658920fd6705f948ff7eea  /tmp/fotobox.tar.gz"
+      | sha256sum -c -; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1;
+      rm /tmp/fotobox.tar.gz; exec nginx -c /opt/fotobox/nginx.conf -g "daemon off;"
+    networks:
+    - web
+    - default
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: web
+      traefik.http.routers.fotobox-route.rule: Host(`fotobox.bierlich.cloud`)
+      traefik.http.routers.fotobox-route.entrypoints: websecure
+      traefik.http.routers.fotobox-route.tls: 'true'
+      traefik.http.routers.fotobox-route.tls.certresolver: le
+      traefik.http.routers.fotobox-route.service: fotobox-service
+      traefik.http.routers.fotobox-http.rule: Host(`fotobox.bierlich.cloud`)
+      traefik.http.routers.fotobox-http.entrypoints: web
+      traefik.http.routers.fotobox-http.middlewares: fotobox-https
+      traefik.http.routers.fotobox-http.service: fotobox-service
+      traefik.http.middlewares.fotobox-https.redirectscheme.scheme: https
+      traefik.http.middlewares.fotobox-https.redirectscheme.permanent: 'true'
+      traefik.http.services.fotobox-service.loadbalancer.server.port: '8080'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://127.0.0.1:8080/
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      booking:
+        condition: service_healthy
+  booking:
+    image: node:24-alpine
+    restart: unless-stopped
+    command:
+    - /bin/sh
+    - -c
+    - set -eu; umask 077; mkdir -p /opt/fotobox /data; chown node:node /data; chmod
+      700 /data; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/01efcb65d6e9790aa57c421f38432c35c41a86b6;
+      tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz;
+      cd /opt/fotobox; npm ci --omit=dev --ignore-scripts --no-audit --no-fund; chmod
+      -R a+rX /opt/fotobox; exec su node -s /bin/sh -c "node /opt/fotobox/server/index.mjs"
+    environment:
+      NODE_ENV: production
+      SITE_URL: https://fotobox.bierlich.cloud
+      DATA_DIR: /data
+      PORT: '3000'
+      BASE_PRICE_CENTS: '25000'
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+    volumes:
+    - booking-data:/data
+    networks:
+    - default
+    labels:
+      traefik.enable: 'false'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://127.0.0.1:3000/api/health
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
+networks:
+  web:
+    external: true
+  default: {}
+volumes:
+  booking-data: {}
