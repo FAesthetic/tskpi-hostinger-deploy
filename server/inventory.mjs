@@ -11,10 +11,10 @@ export function extensionDays(value = 0) {
 }
 
 // Run before schema/data changes. The full SQLite snapshot includes WAL contents.
-export function backupBeforeMigration(db, directory, keyPath) {
- if (db.prepare('PRAGMA user_version').get().user_version >= 1) return null;
+export function backupBeforeMigration(db, directory, keyPath, {force=false,prefix="before-one-box-"} = {}) {
+ if (!force && db.prepare('PRAGMA user_version').get().user_version >= 1) return null;
  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bookings'").get()) return null;
- const folder = path.join(directory, 'backups', 'before-one-box-' + randomUUID());
+ const folder = path.join(directory, 'backups', prefix + randomUUID());
  mkdirSync(folder, { recursive: true, mode: 0o700 });
  const file = path.join(folder, 'bookings.sqlite');
  db.prepare('VACUUM INTO ?').run(file);
