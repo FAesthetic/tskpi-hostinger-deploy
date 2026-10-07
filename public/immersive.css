@@ -77,3 +77,16 @@
 .featured .button:hover{background:var(--wine-dark)}
 @media(max-width:760px){.story-panel{background:linear-gradient(180deg,rgba(247,241,232,0),#f7f1e8 22%)}}
 @media(prefers-reduced-motion:reduce){.story-panel{background:none}.product-figure img{mix-blend-mode:normal}}
+
+/* Mobile uses native document scrolling instead of a large animated sticky layer. */
+@media(max-width:760px),(prefers-reduced-motion:reduce){
+ .product-story{height:auto}
+ .product-sticky{position:relative;height:auto;overflow:visible;padding:140px 24px 44px}
+ .story-intro{position:relative;inset:auto;opacity:1;transform:none}
+ .product-figure{position:relative;inset:auto;transform:none;will-change:auto;height:65svh;max-height:650px;margin:24px auto}
+ .product-figure img{mix-blend-mode:normal}
+ .story-panel{position:relative;inset:auto;opacity:1!important;transform:none!important;pointer-events:auto;max-width:650px;margin:36px auto;padding:0;background:none}
+ .story-bottom{display:none}
+ .product-note{display:block;position:relative;inset:auto;transform:none;text-align:center;white-space:normal;margin:20px auto 30px}
+}
+@media(max-width:760px){html{scroll-behavior:auto}}
