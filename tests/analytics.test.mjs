@@ -9,7 +9,7 @@ import { createApp } from '../server/index.mjs';
 import { createAnalytics } from '../server/analytics.mjs';
 import { createStore, passwordHash, plusDays, today } from '../server/core.mjs';
 
-const context = () => ({ consent:true,flow:randomUUID(),source:'meta',medium:'paid_social',campaign:'FBX_Hochzeit2026_Lokal_Test14T',content:'B_Quatschbilder',device:'mobil' });
+const context = () => ({ mode:'aggregate',source:'meta',medium:'paid_social',campaign:'FBX_Hochzeit2026_Lokal_Test14T',content:'B_Quatschbilder' });
 function fixture(t) {
   const dir = mkdtempSync(path.join(tmpdir(),'fotobox-analytics-'));
   const store = createStore(dir); let milliseconds = Date.now();
@@ -19,24 +19,24 @@ function fixture(t) {
 }
 const inquiry = () => ({name:'Test only',email:'test@example.invalid',date:plusDays(today(),40),location:'Local test location',delivery:'pickup',customerType:'private'});
 
-test('requires consent, validates events, drops private fields, deduplicates retries and excludes tests',t=>{
+test('requires aggregate mode, validates events, stores only daily counters and excludes tests',t=>{
   const {store,analytics} = fixture(t), c=context();
   const event={...c,id:randomUUID(),event:'page_view',page:'/',name:'PRIVATE',email:'PRIVATE@example.com',message:'PRIVATE'};
-  assert.equal(analytics.record({...event,consent:false}),false);
+  assert.equal(analytics.record({...event,mode:'disabled'}),false);
   assert.equal(analytics.record({...event,event:'request_saved'}),false);
   assert.equal(analytics.record({...event,page:'/verwaltung/'}),false);
-  assert.equal(analytics.record(event),true);assert.equal(analytics.record(event),true);
+  assert.equal(analytics.record(event),true);
   analytics.record({...event,id:randomUUID(),test:true});
-  const rows=store.db.prepare('SELECT * FROM analytics_events').all();
-  assert.equal(rows.length,2);assert.equal(JSON.stringify(rows).includes('PRIVATE'),false);
-  assert.equal(analytics.summary().events[0].sessions,1);assert.equal(analytics.summary().events[0].events,1);
+  const rows=store.db.prepare('SELECT * FROM analytics_counts').all();
+  assert.equal(rows.length,2);assert.equal(Object.hasOwn(rows[0],'flow'),false);assert.equal(Object.hasOwn(rows[0],'device'),false);assert.equal(JSON.stringify(rows).includes('PRIVATE'),false);
+  assert.equal(analytics.summary().events[0].events,1);
   analytics.record({...c,id:randomUUID(),event:'validation_error',page:'/termin/',detail:'PRIVATE@example.com'});
   assert.equal(analytics.summary().errors[0].detail,'other');
 });
 
 test('verified requests are counted once with current booking and mail status; retention preserves bookings',t=>{
   const {store,analytics,advance}=fixture(t),c=context(),b=store.createRequest(inquiry());
-  analytics.saved(b,{...c,consent:false});assert.equal(analytics.summary().requests.length,0);
+  analytics.saved(b,{...c,mode:'disabled'});assert.equal(analytics.summary().requests.length,0);
   analytics.saved(b,c);analytics.saved(b,c);
   let row=analytics.summary().requests[0];assert.equal(row.requests,1);assert.equal(row.confirmed,0);
   store.db.prepare("UPDATE bookings SET status='confirmed' WHERE id=?").run(b.id);
@@ -59,7 +59,7 @@ test('public event endpoint enforces origin; report requires owner login; succes
   const call=(url,body,headers={})=>fetch(base+url,{method:body?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})});
   const c=context(),event={...c,id:randomUUID(),event:'page_view',page:'/'};
   assert.equal((await call('/api/analytics/event',event,{Origin:'https://attacker.invalid'})).status,403);
-  assert.equal((await call('/api/analytics/event',{...event,consent:false})).status,400);
+  assert.equal((await call('/api/analytics/event',{...event,mode:'disabled'})).status,400);
   assert.equal((await call('/api/analytics/event',event)).status,200);
   assert.equal((await call('/api/admin/analytics')).status,401);
   const login=await call('/api/admin/login',{password});const cookie=login.headers.get('set-cookie').split(';')[0];
