@@ -6,7 +6,7 @@
       "command": [
         "/bin/sh",
         "-c",
-        "set -eu; mkdir -p /opt/fotobox; wget -q -T 45 -O /tmp/fotobox.tar.gz https://raw.githubusercontent.com/FAesthetic/tskpi-hostinger-deploy/2c052ea33d8aeeff7dbef181cc42f75c5468692a/analytics-20261010/site.tar.gz; echo \"84cef782e900078a613a8b360276b7f73993b0582f6260941f0302e7d2ca0645  /tmp/fotobox.tar.gz\" | sha256sum -c -; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; exec nginx -c /opt/fotobox/nginx.conf -g \"daemon off;\""
+        "set -eu; mkdir -p /opt/fotobox; wget -q -T 45 -O /tmp/fotobox.tar.gz https://raw.githubusercontent.com/FAesthetic/tskpi-hostinger-deploy/e3394f6139ae3e2891226108c669525eab5e0749/analytics-20261010/site.tar.gz; echo \"cc98f01546a6a69eee17e9b989f008e4f990bbc475193e0276fc90a50b1b8e96  /tmp/fotobox.tar.gz\" | sha256sum -c -; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; exec nginx -c /opt/fotobox/nginx.conf -g \"daemon off;\""
       ],
       "networks": [
         "web",
@@ -53,7 +53,7 @@
       "command": [
         "/bin/sh",
         "-c",
-        "set -eu; umask 077; mkdir -p /opt/fotobox /data; chown node:node /data; chmod 700 /data; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/2c052ea33d8aeeff7dbef181cc42f75c5468692a; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; cd /opt/fotobox; npm ci --omit=dev --ignore-scripts --no-audit --no-fund; chmod -R a+rX /opt/fotobox; exec su node -s /bin/sh -c \"node /opt/fotobox/server/index.mjs\""
+        "set -eu; umask 077; mkdir -p /opt/fotobox /data; chown node:node /data; chmod 700 /data; wget -q -T 45 -O /tmp/fotobox.tar.gz https://codeload.github.com/FAesthetic/tskpi-hostinger-deploy/tar.gz/e3394f6139ae3e2891226108c669525eab5e0749; tar xzf /tmp/fotobox.tar.gz -C /opt/fotobox --strip-components=1; rm /tmp/fotobox.tar.gz; cd /opt/fotobox; npm ci --omit=dev --ignore-scripts --no-audit --no-fund; chmod -R a+rX /opt/fotobox; exec su node -s /bin/sh -c \"node /opt/fotobox/server/index.mjs\""
       ],
       "environment": {
         "NODE_ENV": "production",
