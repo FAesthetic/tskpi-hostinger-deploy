@@ -56,3 +56,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 @media(max-width:760px){.new-header{padding:20px;gap:10px}.new-header nav{gap:8px}.new-header .brand-image{width:132px}.new-header .pill{padding:11px 12px;gap:5px}.story-panel{background:linear-gradient(180deg,var(--hero-clear),var(--hero) 22%)}.package-extras{grid-template-columns:1fr;gap:24px}.location-section{padding-top:60px;padding-bottom:60px}.theme-menu{right:0}.scheduler-aside .brand-image{width:162px}}
 @media(max-width:380px){.new-header{padding-inline:14px}.new-header .brand-image{width:110px}.new-header .pill{font-size:.75rem;padding-inline:9px}.new-header nav{gap:6px}}
 @media(prefers-reduced-motion:reduce){.story-panel{background:none}}
+
+/* Shared b. identity. The point is Fotobox orchid. */
+.brand-image{width:220px;height:auto;max-width:100%}.new-header .brand-image{width:220px}.scheduler-aside .brand-image{width:220px}.new-footer .brand-image{width:220px}
+@media(max-width:760px){.new-header .brand-lockup{width:44px;height:44px;min-width:44px;background:url('/favicon.svg?v=b-square-20260906') center/contain no-repeat}.new-header .brand-lockup picture{display:none}.scheduler-aside .brand-image{width:220px}}
