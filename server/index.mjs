@@ -1,5 +1,5 @@
 import { createAnalytics } from './analytics.mjs';
-import { extensionDays, PRICE_VERSION } from './inventory.mjs';
+import { extensionDays, PRICE_VERSION, pricingVersion } from './inventory.mjs';
 import http from 'node:http';
 import {createPayments} from './payments.mjs';
 import {renderBookingPdf} from './booking-pdf.mjs';
@@ -14,7 +14,7 @@ export function createApp({directory=process.env.DATA_DIR||'./data',origin=proce
  const store=createStore(directory,{bootstrapHash,legacyBaseCents:Number(process.env.BASE_PRICE_CENTS||25000)});const {db,get,set,enqueue}=store;
  const analytics=createAnalytics(db);
  const owner=()=>get('owner_email','uhighcauseidope@gmail.com');
- const legal=version=>readFileSync(new URL(version==='2026-09-05-v1'?'./terms-v1.txt':version==='2026-09-05-v2'?'./terms-v2.txt':version==='2026-09-05-v3'?'./terms-v3.txt':'./terms.txt',import.meta.url),'utf8')+'\n\n'+readFileSync(new URL('./withdrawal.txt',import.meta.url),'utf8');
+ const legal=version=>readFileSync(new URL(version==='2026-09-05-v1'?'./terms-v1.txt':version==='2026-09-05-v2'?'./terms-v2.txt':version==='2026-09-05-v3'?'./terms-v3.txt':version==='2026-09-06-v4'?'./terms-v4.txt':'./terms.txt',import.meta.url),'utf8')+'\n\n'+readFileSync(new URL('./withdrawal.txt',import.meta.url),'utf8');
  const euro=n=>new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'}).format(n/100);
  const when=n=>new Intl.DateTimeFormat('de-DE',{timeZone:'Europe/Berlin',dateStyle:'long',timeStyle:'long'}).format(new Date(n));
  const stripe=()=>{const key=get('stripe_key');if(!key)throw Error('Zahlungsanbieter noch nicht verbunden.');return stripeFactory(key);};
@@ -24,7 +24,7 @@ export function createApp({directory=process.env.DATA_DIR||'./data',origin=proce
  const mailReady=()=>!!get('mail_received');
  const whatsapp='https://wa.me/491712807197';
  const baseFor=b=>b.delivery==='pickup'?pickupCents:baseCents;
- const duration=b=>b.extension_days===1?'bis zu 48 Stunden (24 Stunden plus vereinbarte Verlängerung)':'bis zu 24 Stunden';
+ const duration=b=>b.pricing_version===PRICE_VERSION?'einen Veranstaltungsabend; Lieferung, Abholung und Rückgabe nach Vereinbarung, frühere Anlieferung ohne Aufpreis':b.extension_days===1?'bis zu 48 Stunden (24 Stunden plus vereinbarte Verlängerung)':'bis zu 24 Stunden';
  const emailOfferOptions={offerLabel:'Freibleibendes Angebot · Verfügbarkeit vorbehalten',acceptanceText:'Dieses Angebot ist freibleibend; die Verfügbarkeit bleibt vorbehalten. Es reserviert keine Fotobox. Antwortet zur Abstimmung auf unsere E-Mail. Eine Buchung kommt erst nach persönlicher Bestätigung zustande.'};
  const pdfData=(kind,b,options={})=>({kind,booking:Object.fromEntries(['reference','name','email','phone','event_date','location','delivery','message','status','base_cents','travel_cents','total_cents','distance','billed_distance','quote_until','created','terms_version','end_date','extension_days','extension_cents','pricing_version','confirmation_method'].map(k=>[k,b[k]])),options});
  const pdf=payload=>renderBookingPdf(payload.kind,payload.booking,{baseCents,owner:{email:owner(),origin},...payload.options});
@@ -44,7 +44,7 @@ export function createApp({directory=process.env.DATA_DIR||'./data',origin=proce
  const email=v=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)&&v.length<=200&&!/[\r\n]/.test(v);
  const quoteURL=b=>`${origin}/buchen/?angebot=${get('booking_access_'+b.id)}`;
  const sessionFor=req=>{const m=(req.headers.cookie||'').match(/(?:^|;\s*)hb_admin=([^;]+)/);return m?db.prepare('SELECT * FROM sessions WHERE id=? AND expires>?').get(hash(m[1]),Date.now()):null;};
- function publicBooking(b){return {reference:b.reference,name:b.name,eventDate:b.event_date,location:b.location,delivery:b.delivery,status:b.status,extensionDays:b.extension_days||0,extensionCents:b.extension_cents||0,endDate:b.end_date,baseCents:b.base_cents,travelCents:b.travel_cents,totalCents:b.total_cents,refundStatus:b.refund_status,distanceKm:b.distance,billedDistanceKm:b.billed_distance,termsVersion:b.terms_version||'2026-09-05-v1',quoteUntil:b.quote_until,canPay:ready()&&((b.status==='quoted'&&b.quote_until>Date.now()&&b.event_date>=plusDays(today(),15))||b.status==='checkout'),paymentPending:['checkout','processing'].includes(b.status)};}
+ function publicBooking(b){return {reference:b.reference,name:b.name,eventDate:b.event_date,location:b.location,delivery:b.delivery,status:b.status,extensionDays:b.extension_days||0,extensionCents:b.extension_cents||0,endDate:b.end_date,baseCents:b.base_cents,travelCents:b.travel_cents,totalCents:b.total_cents,refundStatus:b.refund_status,distanceKm:b.distance,billedDistanceKm:b.billed_distance,pricingVersion:b.pricing_version,termsVersion:b.terms_version||'2026-09-05-v1',quoteUntil:b.quote_until,canPay:ready()&&((b.status==='quoted'&&b.quote_until>Date.now()&&b.event_date>=plusDays(today(),15))||b.status==='checkout'),paymentPending:['checkout','processing'].includes(b.status)};}
  async function handler(req,res){let measurementContext=null;res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');const send=(status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(obj));};
  try{const url=new URL(req.url,origin),route=url.pathname,method=req.method;const ip=req.headers['x-real-ip']||req.socket.remoteAddress;rate(ip,'all',240,60000);
  if(method==='GET'&&route==='/api/health')return send(200,{ok:true});
@@ -76,7 +76,7 @@ export function createApp({directory=process.env.DATA_DIR||'./data',origin=proce
  if(method==='POST'&&route==='/api/admin/offer-preview'){
   const b=store.booking(clean(body.id,100));if(!b||!['requested','expired'].includes(b.status)||b.delivery==='custom')throw Error('Bitte eine offene Anfrage für eine Fotobox auswählen. Individuelle Leistungen stimmt ihr persönlich ab.');if(b.event_date<today())throw Error('Der Veranstaltungstag liegt bereits in der Vergangenheit.');
   const distance=b.delivery==='pickup'?0:body.distanceKm;if(typeof distance!=='number')throw Error('Bitte die geprüfte einfache Straßenentfernung eintragen.');const extra=extensionDays(body.extensionDays??0);if(b.delivery==='pickup'&&body.pickupChecked!==true)throw Error('Bitte sicheren Transport und Bedienbarkeit bei Selbstabholung prüfen.');const end=plusDays(b.event_date,2+extra);if(!store.available(b.event_date,end,b.id).length)throw Error('Die Fotobox ist in diesem Zeitraum einschließlich Rückgabe belegt.');const amounts=priceFor(baseFor(b),distance,b.delivery,extra,extensionCents);
-  const id=token(),created=Date.now(),record={...b,distance,billed_distance:Math.ceil(distance/5)*5,base_cents:amounts.baseCents,travel_cents:amounts.travelCents,total_cents:amounts.totalCents,extension_days:extra,extension_cents:amounts.extensionCents,end_date:end,pricing_version:PRICE_VERSION,quote_until:created+48*3600000,terms_version:null};
+  const id=token(),created=Date.now(),record={...b,distance,billed_distance:Math.ceil(distance/5)*5,base_cents:amounts.baseCents,travel_cents:amounts.travelCents,total_cents:amounts.totalCents,extension_days:extra,extension_cents:amounts.extensionCents,end_date:end,pricing_version:pricingVersion(extra),quote_until:created+48*3600000,terms_version:null};
   const payload=pdfData('offer',record,emailOfferOptions),buffer=await pdf(payload);
   db.prepare("INSERT INTO email_offers(id,booking_id,snapshot,created) VALUES(?,?,?,?)").run(id,b.id,JSON.stringify(payload),created);
   return send(200,{ok:true,previewId:id,pdfBase64:buffer.toString('base64'),filename:pdfFilename(payload),totalCents:record.total_cents,recipient:b.email,validUntil:record.quote_until});
@@ -101,7 +101,7 @@ export function createApp({directory=process.env.DATA_DIR||'./data',origin=proce
    const extra=extensionDays(q.extension_days??0),end=q.end_date||plusDays(q.event_date,2+extra);
    if(!store.available(q.event_date,end,b.id).length)throw Object.assign(Error('Keine Bestätigung möglich: Die einzige Fotobox ist in diesem Zeitraum einschließlich Rückgabe bereits belegt.'),{status:409});
    if(q.base_cents+q.travel_cents+(q.extension_cents||0)!==q.total_cents)throw Error('Angebotsbeträge bitte prüfen.');
-   db.prepare("UPDATE bookings SET status='confirmed',unit=1,base_cents=?,travel_cents=?,total_cents=?,distance=?,billed_distance=?,extension_days=?,extension_cents=?,end_date=?,pricing_version=?,quote_until=?,confirmed=?,confirmation_method='personal',terms_version=? WHERE id=?").run(q.base_cents,q.travel_cents,q.total_cents,q.distance,q.billed_distance,extra,q.extension_cents||0,end,q.pricing_version||null,q.quote_until,Date.now(),q.pricing_version?PRICE_VERSION:'2026-09-05-v3',b.id);
+   db.prepare("UPDATE bookings SET status='confirmed',unit=1,base_cents=?,travel_cents=?,total_cents=?,distance=?,billed_distance=?,extension_days=?,extension_cents=?,end_date=?,pricing_version=?,quote_until=?,confirmed=?,confirmation_method='personal',terms_version=? WHERE id=?").run(q.base_cents,q.travel_cents,q.total_cents,q.distance,q.billed_distance,extra,q.extension_cents||0,end,q.pricing_version||null,q.quote_until,Date.now(),q.pricing_version||'2026-09-05-v3',b.id);
    db.prepare("UPDATE email_offers SET status='accepted' WHERE id=?").run(offer.id);set('confirmed_offer_'+b.id,offer.id);const fresh=store.booking(b.id);
    enqueue(b.email,'Eure Fotobox-Buchung '+b.reference,`Hallo ${b.name},\n\nwie persönlich abgestimmt ist die Fotobox für ${b.event_date} bei euch gebucht. Dauer: ${duration(fresh)}. Gesamtbetrag: ${euro(fresh.total_cents)}. Diese Bestätigung bestätigt keinen Zahlungseingang. Zahlungsweise und Übergabe wurden persönlich vereinbart.\n\nDie Buchungsübersicht findet ihr im PDF-Anhang.\nFotobox Rendsburg · 0171 28 07 197`,null,'confirmation-'+b.id,pdfData('confirmation',fresh,{paymentConfirmed:false}));
    return fresh;

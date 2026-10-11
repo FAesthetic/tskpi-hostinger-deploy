@@ -283,7 +283,7 @@ for (const delivery of ['pickup', 'delivery']) {
       assert.equal(b.extension_days, extensionDays);
       assert.equal(b.extension_cents, extensionDays * 4900);
       assert.equal(b.end_date, plusDays(DATE, 2 + extensionDays));
-      assert.equal(b.pricing_version, PRICE_VERSION);
+      assert.equal(b.pricing_version, extensionDays ? '2026-09-06-v4' : PRICE_VERSION);
       assert.equal(b.status, 'requested');
       assert.equal(b.unit, null);
       assert.equal(b.total_cents, delivery === 'pickup' ? 19900 + extensionDays * 4900 : null);
@@ -480,7 +480,7 @@ test('HTTP exposes one box and snapshots current pickup/delivery prices and requ
       assert.equal(b.unit, null);
       assert.equal(b.status, 'requested');
       assert.equal(response.body.emailQueued, false);
-      assert.match(response.body.receiptText, extensionDays ? /48 Stunden/ : /24 Stunden/);
+      assert.match(response.body.receiptText, extensionDays ? /48 Stunden/ : /Veranstaltungsabend/);
       assert.equal(Buffer.from(response.body.pdfBase64, 'base64').subarray(0, 5).toString(), '%PDF-');
       for (const prefix of ['request-received-', 'request-owner-']) {
         const job = f.store.db.prepare('SELECT * FROM outbox WHERE id=?').get(prefix + b.id);
@@ -575,7 +575,7 @@ test('HTTP personal confirmation requires calendar/agreement/pickup checks and q
   assert.equal(b.confirmation_method, 'personal');
   assert.equal(b.total_cents, 24800);
   assert.equal(b.end_date, plusDays(DATE, 3));
-  assert.equal(b.terms_version, PRICE_VERSION);
+  assert.equal(b.terms_version, '2026-09-06-v4');
   assert.equal(b.payment_intent, null);
   assert.equal(b.session_id, null);
   assert.equal(f.store.get('confirmed_offer_' + b.id), body.previewId);

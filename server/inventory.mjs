@@ -4,7 +4,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export const HELD = "'quoted','checkout','processing','confirmed','payment_review','refund_pending'";
-export const PRICE_VERSION = '2026-09-06-v4';
+export const PRICE_VERSION = '2026-10-11-v5';
+export const pricingVersion = extra => extra === 1 ? '2026-09-06-v4' : PRICE_VERSION;
 export function extensionDays(value = 0) {
  if (value !== 0 && value !== 1) throw Error('Eine Verlängerung ist nur um bis zu weitere 24 Stunden möglich.');
  return value;

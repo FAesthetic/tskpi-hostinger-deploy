@@ -52,7 +52,7 @@ test('new offers retain exact route and rounded billing snapshot, old offers sur
   assert.equal(quote.travel_cents, 1200);
   assert.equal(quote.extension_cents, 0);
   assert.equal(quote.total_cents, 26100);
-  assert.equal(quote.terms_version, '2026-09-06-v4');
+  assert.equal(quote.terms_version, '2026-10-11-v5');
 
   // Model an already-issued EUR 250, kilometer-exact offer. Its price and legal
   // snapshot must survive independently of today's EUR 249 delivery package.
