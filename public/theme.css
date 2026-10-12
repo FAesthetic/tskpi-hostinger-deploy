@@ -60,3 +60,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 /* Shared b. identity. The point is Fotobox orchid. */
 .brand-image{width:220px;height:auto;max-width:100%}.new-header .brand-image{width:220px}.scheduler-aside .brand-image{width:220px}.new-footer .brand-image{width:220px}
 @media(max-width:760px){.new-header .brand-lockup{width:44px;height:44px;min-width:44px;background:url('/favicon.svg?v=b-square-20260906') center/contain no-repeat}.new-header .brand-lockup picture{display:none}.scheduler-aside .brand-image{width:220px}}
+
+/* Keep the landing-page CTA readable despite the more specific .legal a rule. */
+.legal a.button,.legal a.button:hover{color:var(--button-ink)}
+.legal a.button.outline,.legal a.button.outline:hover{color:var(--wine)}

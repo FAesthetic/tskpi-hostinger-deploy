@@ -22,7 +22,7 @@ export function createApp({directory=process.env.DATA_DIR||'./data',origin=proce
  const readiness=()=>({payments:!!get('stripe_live_ready'),email:!!get('mail_received'),calendar:!!get('calendar_reviewed'),conditions:!!get('terms_reviewed'),webhook:!!get('webhook_secret')&&!!get('webhook_verified'),live:!!get('live')});
  const ready=()=>{const r=readiness();return r.live&&r.payments&&r.email&&r.calendar&&r.conditions&&r.webhook;};
  const mailReady=()=>!!get('mail_received');
- const whatsapp='https://wa.me/491712807197';
+ const whatsapp='https://wa.me/4943316636466';
  const baseFor=b=>b.delivery==='pickup'?pickupCents:baseCents;
  const duration=b=>b.pricing_version===PRICE_VERSION?'einen Veranstaltungsabend; Lieferung, Abholung und Rückgabe nach Vereinbarung, frühere Anlieferung ohne Aufpreis':b.extension_days===1?'bis zu 48 Stunden (24 Stunden plus vereinbarte Verlängerung)':'bis zu 24 Stunden';
  const emailOfferOptions={offerLabel:'Freibleibendes Angebot · Verfügbarkeit vorbehalten',acceptanceText:'Dieses Angebot ist freibleibend; die Verfügbarkeit bleibt vorbehalten. Es reserviert keine Fotobox. Antwortet zur Abstimmung auf unsere E-Mail. Eine Buchung kommt erst nach persönlicher Bestätigung zustande.'};
